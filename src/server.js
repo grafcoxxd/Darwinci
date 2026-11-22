@@ -29,7 +29,7 @@ app.use(express.json({ limit: "32kb" }));
 app.use(express.static(publicDir));
 
 app.get("/health", (_request, response) => {
-  response.json({ ok: true, service: "sketch-sabotage" });
+  response.json({ ok: true, service: "darwinci" });
 });
 
 app.get("/api/config", (_request, response) => {
@@ -242,38 +242,33 @@ io.on("connection", (socket) => {
   });
 });
 
-const timer = setInterval(async () => {
+setInterval(async () => {
   if (tickingRooms.size) return;
-  try {
-    for (const room of await store.listRooms()) {
-      if (!["drawing", "guessing", "voting", "result"].includes(room.phase)) continue;
-      tickingRooms.add(room.code);
-      try {
-        await mutateAndBroadcast(room.code, async (current) => {
-          game.advanceTimers(current);
-        });
-      } catch (error) {
-        console.error(`Timerfehler in ${room.code}:`, error.message);
-      } finally {
-        tickingRooms.delete(room.code);
-      }
+  for (const room of await store.listRooms()) {
+    if (!["drawing", "guessing", "voting", "result"].includes(room.phase)) continue;
+    tickingRooms.add(room.code);
+    try {
+      const updated = await mutateAndBroadcast(room.code, async (current) => {
+        game.advanceTimers(current);
+      });
+      if (updated.phase === "lobby") tickingRooms.delete(room.code);
+    } catch (error) {
+      console.error(`Timerfehler in ${room.code}:`, error.message);
+    } finally {
+      tickingRooms.delete(room.code);
     }
-  } catch (error) {
-    console.error("Datenbankfehler im Spiel-Timer:", error.message);
   }
-}, 1000);
-timer.unref();
+}, 1000).unref();
 
 const port = Number(process.env.PORT) || 3000;
 store.initStore()
-  .then(() => server.listen(port, () => console.log(`Sketch Sabotage läuft auf Port ${port}`)))
+  .then(() => server.listen(port, () => console.log(`Darwinci läuft auf Port ${port}`)))
   .catch((error) => {
     console.error(error.message);
     process.exitCode = 1;
   });
 
 async function shutdown() {
-  clearInterval(timer);
   server.close();
   await store.closeStore();
   process.exit(0);

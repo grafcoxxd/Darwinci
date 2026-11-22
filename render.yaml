@@ -1,8 +1,9 @@
 services:
   - type: web
-    name: sketch-sabotage
+    name: darwinci
     runtime: node
     plan: free
+    region: frankfurt
     buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /health

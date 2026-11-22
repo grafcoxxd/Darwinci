@@ -269,7 +269,7 @@ function renderGame() {
     room.phase === "voting" ? votingView(room) :
     room.phase === "result" ? resultView(room) : gameoverView(room);
   $("#game").innerHTML = `<div class="game-shell">
-    <header class="game-header panel"><div><h2>Sketch Sabotage</h2><div class="lobby-code">LOBBY ${room.code}</div></div>
+    <header class="game-header panel"><div><h2>Darwinci</h2><div class="lobby-code">LOBBY ${room.code}</div></div>
       <div class="phase-pill"><strong>${phaseText(room.phase)}</strong> ${room.round ? `· Runde ${room.round}` : ""}</div>
       <div class="timer" id="phase-timer">${formatTime(room.deadline)}</div>
     </header>
