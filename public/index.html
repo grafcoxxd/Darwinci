@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#121520">
+  <title>Sketch Sabotage</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/socket.io/socket.io.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main id="app">
+    <header class="brand">
+      <span class="brand-mark">✦</span>
+      <div><h1>Sketch <em>Sabotage</em></h1><p>Zeichnen. Täuschen. Entlarven.</p></div>
+    </header>
+    <section id="toast" class="toast hidden" role="status"></section>
+    <section id="entry" class="entry panel">
+      <div class="hero-copy">
+        <span class="eyebrow">GEHEIME ROLLEN · GROSSE LÜGEN</span>
+        <h2>Kannst du den Pinsel<br><em>von der Täuschung</em> trennen?</h2>
+        <p>Ein gesellschaftliches Zeichen- und Deduktionsspiel. Malt gemeinsam, findet das Wort – und entlarvt die Saboteure.</p>
+        <ol class="steps">
+          <li><b>01</b><span>Erstellt eine Lobby und wählt euren Charakter.</span></li>
+          <li><b>02</b><span>Ein Spieler zeichnet, Saboteure kennen das Wort.</span></li>
+          <li><b>03</b><span>Eure Lösung und Abstimmung entscheiden die Runde.</span></li>
+        </ol>
+      </div>
+      <div class="entry-card">
+        <div class="tabs"><button class="active" data-tab="create">Lobby erstellen</button><button data-tab="join">Beitreten</button></div>
+        <form id="entry-form">
+          <label>Dein Name<input id="player-name" maxlength="18" placeholder="z. B. Stiftmeister" autocomplete="nickname" required></label>
+          <label id="code-field" class="hidden">Lobby-Code<input id="lobby-code" maxlength="5" placeholder="ABCDE" autocapitalize="characters"></label>
+          <fieldset><legend>Wähle deinen Charakter <span>Nur Optik</span></legend><div id="character-picker" class="character-picker"></div></fieldset>
+          <button class="primary" type="submit" id="entry-submit">Lobby erstellen <span>→</span></button>
+        </form>
+      </div>
+    </section>
+    <section id="game" class="hidden"></section>
+  </main>
+</body>
+</html>
