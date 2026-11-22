@@ -162,8 +162,10 @@ function renderSettings(room) {
 
 function lobbyView(room) {
   const isHost = room.hostId === room.me;
-  const warnings = room.players.length < 4 ? "Noch mindestens 4 Spieler nötig" :
-    room.settings.saboteurCount > Math.floor((room.players.length - 1) / 2) ? "Zu viele Saboteure für diese Lobby" : "Alle bereit für den Start";
+  const maxSaboteurs = room.players.length < 3 ? 0 : Math.floor((room.players.length - 1) / 2);
+  const warnings = room.settings.saboteurCount > maxSaboteurs
+    ? `${room.players.length < 3 ? "Testmodus" : "Hinweis"}: Es werden ${maxSaboteurs} Saboteure verteilt.`
+    : "Alle bereit für den Start";
   return `
     <aside class="sidebar panel"><h3>Spieler · ${room.players.length}/12</h3>${renderPlayerList(room)}</aside>
     <section class="main-stage panel">
@@ -174,7 +176,7 @@ function lobbyView(room) {
         <div class="waiting-seats">${room.players.slice(0, 8).map(player => `<div class="waiting-seat"><div class="avatar" style="background:${player.character.color}24">${player.character.icon}</div><b>${escapeHtml(player.name)}</b></div>`).join("")}
           ${Array.from({ length: Math.max(0, 4 - room.players.length) }, () => '<div class="waiting-seat"><span class="empty-seat">+</span></div>').join("")}
         </div>
-        <p class="${room.players.length >= 4 ? "success-text" : "danger-text"}">${warnings}</p>
+        <p class="${room.settings.saboteurCount > maxSaboteurs ? "danger-text" : "success-text"}">${warnings}</p>
         ${isHost ? '<button id="start-game" class="primary">Spiel starten <span>→</span></button>' : '<p class="hint">Der Host startet das Spiel.</p>'}
         <button id="leave-lobby" class="secondary leave-lobby" type="button">Lobby verlassen</button>
       </div>

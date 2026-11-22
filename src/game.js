@@ -172,13 +172,9 @@ function getWords(settings) {
 }
 
 function startGame(room) {
+  if (!room.players.length) throw new Error("Die Lobby ist leer.");
   if (room.hostId !== room.players[0]?.id && !room.players.some((p) => p.id === room.hostId)) {
     room.hostId = room.players[0]?.id || null;
-  }
-  if (room.players.length < 4) throw new Error("Für ein Spiel werden mindestens 4 Spieler benötigt.");
-  const maxSaboteurs = Math.floor((room.players.length - 1) / 2);
-  if (room.settings.saboteurCount > maxSaboteurs) {
-    throw new Error(`Mit ${room.players.length} Spielern sind maximal ${maxSaboteurs} Saboteure sinnvoll.`);
   }
   const words = getWords(room.settings);
   if (!words.length) throw new Error("Das gewählte Wortpaket enthält keine Wörter.");
@@ -193,7 +189,9 @@ function startGame(room) {
     const swapIndex = crypto.randomInt(index + 1);
     [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
   }
-  shuffled.slice(0, room.settings.saboteurCount).forEach((player) => { player.role = "saboteur"; });
+  const maxSaboteurs = room.players.length < 3 ? 0 : Math.floor((room.players.length - 1) / 2);
+  shuffled.slice(0, Math.min(room.settings.saboteurCount, maxSaboteurs))
+    .forEach((player) => { player.role = "saboteur"; });
   room.round = 0;
   room.score = 0;
   if (!room.settings.targetScoreCustom) room.settings.targetScore = targetScoreFor(room.players.length);
@@ -233,7 +231,9 @@ function startRound(room) {
 }
 
 function submitGuess(room, playerId, guess) {
-  if (room.phase !== "guessing" || playerId === room.game.drawerId) {
+  const activePlayers = room.players.filter((player) => player.alive && !player.sittingOut);
+  const isOnlyPlayer = activePlayers.length === 1 && activePlayers[0].id === playerId;
+  if (room.phase !== "guessing" || (playerId === room.game.drawerId && !isOnlyPlayer)) {
     throw new Error("Jetzt kann keine Lösung eingereicht werden.");
   }
   const normalized = String(guess || "").trim().replace(/\s+/g, " ").slice(0, 50);
@@ -244,6 +244,7 @@ function submitGuess(room, playerId, guess) {
   room.phase = "voting";
   room.game.voteStartedAt = Date.now();
   room.game.votes = {};
+  if (isOnlyPlayer) resolveVoting(room);
 }
 
 function finishDrawing(room) {
@@ -388,7 +389,8 @@ function publicState(room, viewerId) {
     word: showWord ? room.game.word : null,
     guess: room.game.guess,
     deadline: room.game.deadline,
-    canGuess: room.phase === "guessing" && viewerId !== room.game.drawerId && viewer.alive && !viewer.sittingOut,
+    canGuess: room.phase === "guessing" && viewer.alive && !viewer.sittingOut &&
+      (viewerId !== room.game.drawerId || room.players.filter((player) => player.alive && !player.sittingOut).length === 1),
     hasVoted: Boolean(room.game.votes[viewerId]),
     votesCast: Object.keys(room.game.votes).length,
     activeVoters: room.players.filter((p) => p.alive && !p.sittingOut).length,

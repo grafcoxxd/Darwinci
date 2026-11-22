@@ -123,3 +123,18 @@ test("allows the host to configure a custom target score", () => {
   game.addPlayer(room, "Ella", "panda");
   assert.equal(room.settings.targetScore, 7);
 });
+
+test("supports a single-player test round", () => {
+  const room = game.newRoom("Solo", "fox");
+  game.startGame(room);
+  const player = room.players[0];
+
+  assert.equal(player.role, "good");
+  assert.equal(game.publicState(room, player.id).canGuess, false);
+  game.finishDrawing(room);
+  assert.equal(game.publicState(room, player.id).canGuess, true);
+  game.submitGuess(room, player.id, room.game.word);
+
+  assert.equal(room.phase, "gameover");
+  assert.equal(room.game.lastResult.winner, "good");
+});
