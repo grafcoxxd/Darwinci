@@ -13,6 +13,7 @@ const session = {
   points: [],
   draftFrom: null,
   draftTo: null,
+  guessDraft: "",
   roundId: null,
   canvas: null,
   context: null,
@@ -75,6 +76,7 @@ function connect() {
       session.draftTo = null;
       session.canvas = null;
       session.context = null;
+      session.guessDraft = "";
     }
     session.room = state;
     $("#entry").classList.add("hidden");
@@ -250,7 +252,7 @@ function guessingView(room) {
   return `<section class="main-stage panel">
     <div class="guess-box"><span class="eyebrow">WORT DER GRUPPE</span><h2>Einigt euch auf genau eine Lösung</h2>
       <p class="result-copy">Der Begriff bleibt vorerst geheim – erst nach der Abstimmung wird je nach Lobby-Regel aufgelöst.</p>
-      ${room.canGuess ? `<form id="guess-form"><input id="guess-input" maxlength="50" placeholder="Euer endgültiges Lösungswort" required><button class="primary">Einloggen →</button></form>` : '<p class="hint">Wartet auf die gemeinsame Lösung.</p>'}
+      ${room.canGuess ? `<form id="guess-form"><input id="guess-input" maxlength="50" value="${escapeHtml(session.guessDraft)}" placeholder="Euer endgültiges Lösungswort" autocomplete="off" required><button class="primary">Einloggen →</button></form>` : '<p class="hint">Wartet auf die gemeinsame Lösung.</p>'}
       <p class="hint">Jeder aktive Spieler außer dem Zeichner kann die Einigung einloggen.</p>
     </div>
   </section><aside class="sidebar panel"><h3>Deine Information</h3>${rolePanel(room)}</aside>`;
@@ -298,6 +300,9 @@ function gameoverView(room) {
 function renderGame() {
   const room = session.room;
   if (!room) return;
+  const activeInput = document.activeElement;
+  const restoreGuessFocus = activeInput?.id === "guess-input" && room.phase === "guessing";
+  if (restoreGuessFocus) session.guessDraft = activeInput.value;
   const stage = room.phase === "lobby" ? lobbyView(room) :
     room.phase === "drawing" ? canvasView(room) :
     room.phase === "guessing" ? guessingView(room) :
@@ -313,6 +318,12 @@ function renderGame() {
   </div>`;
   bindGameControls();
   if (room.phase === "drawing") setupCanvas();
+  const guessInput = $("#guess-input");
+  if (guessInput && restoreGuessFocus) {
+    guessInput.value = session.guessDraft;
+    guessInput.focus();
+    guessInput.setSelectionRange(session.guessDraft.length, session.guessDraft.length);
+  }
 }
 
 function bindGameControls() {
@@ -332,6 +343,10 @@ function bindGameControls() {
   $("#guess-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
     session.socket.emit("guess:submit", { guess: $("#guess-input").value });
+    session.guessDraft = "";
+  });
+  $("#guess-input")?.addEventListener("input", (event) => {
+    session.guessDraft = event.target.value;
   });
   $$("[data-vote]").forEach((button) => button.addEventListener("click", () => {
     session.socket.emit("vote:cast", { targetId: button.dataset.vote });

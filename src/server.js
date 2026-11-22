@@ -264,9 +264,11 @@ setInterval(async () => {
     if (!["drawing", "guessing", "voting", "result"].includes(room.phase)) continue;
     tickingRooms.add(room.code);
     try {
-      const updated = await mutateAndBroadcast(room.code, async (current) => {
-        game.advanceTimers(current);
+      let changed = false;
+      const updated = await store.withRoom(room.code, async (current) => {
+        changed = game.advanceTimers(current);
       });
+      if (changed) broadcastRoom(updated);
       if (updated.phase === "lobby") tickingRooms.delete(room.code);
     } catch (error) {
       console.error(`Timerfehler in ${room.code}:`, error.message);
