@@ -326,7 +326,7 @@ legend span { color: var(--line); text-transform: uppercase; letter-spacing: .1e
 .role-reveal.dismissed { opacity: 0; transform: translate(-50%, -54%) scale(.96); pointer-events: none; }
 
 .phase-drawing .canvas-stage { padding: 0 !important; border: 0; background: #0b0f16; overflow: visible; }
-.phase-drawing .canvas-wrap { min-height: calc(100vh - 118px); height: calc(100vh - 118px); border: 1px solid #4a5363; border-radius: 16px; box-shadow: 0 16px 55px #0006; }
+.phase-drawing .canvas-wrap { min-height: calc(90vh - 106px); height: calc(90vh - 106px); border: 1px solid #4a5363; border-radius: 16px; box-shadow: 0 16px 55px #0006; }
 .phase-drawing #drawing-canvas { min-height: 100%; height: 100%; }
 .canvas-caption { position: absolute; left: 14px; top: 13px; z-index: 3; pointer-events: none; display: grid; text-shadow: 0 1px 2px #fff9; }
 .canvas-caption .eyebrow { color: #82622c; font-size: 8px; }
@@ -359,6 +359,15 @@ legend span { color: var(--line); text-transform: uppercase; letter-spacing: .1e
 .phase-drawing .mission-sidebar { grid-area: mission; max-height: calc(100vh - 112px); overflow: auto; }
 .phase-drawing .mission-sidebar .secret-card { margin-bottom: 12px; }
 .phase-drawing .mission-sidebar .secret-word { font-size: clamp(27px, 2.5vw, 40px); }
+.ability-card { margin: 12px 0; padding: 14px; border: 1px solid #a84f5c; border-radius: 13px; background: linear-gradient(145deg, #3a1820, #19151b); }
+.ability-card.used { filter: saturate(.35); opacity: .72; }
+.ability-card .eyebrow { font-size: 8px; color: #ff8e98; }
+.ability-title { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.ability-title b { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: #ffffff12; color: #ff9aa3; font-size: 23px; }
+.ability-title strong { font-size: 19px; }
+.ability-card p { margin: 9px 0 12px; color: #d3bac0; font-size: 10px; line-height: 1.5; }
+.ability-button { width: 100%; border: 1px solid #e15d6b; border-radius: 9px; padding: 10px; background: #d84f60; color: white; font-size: 11px; font-weight: 900; }
+.ability-card.used .ability-button { background: #282229; color: #918a91; border-color: #514751; }
 
 @media (max-width: 1180px) {
   .game-active .game-shell, .phase-lobby { grid-template-columns: 190px minmax(0, 1fr) !important; grid-template-areas: "header header" "main main" "players mission" !important; }
@@ -417,7 +426,7 @@ legend span { color: var(--line); text-transform: uppercase; letter-spacing: .1e
   .phase-drawing .header-actions { justify-content: space-between; grid-row: 2; }
   .role-badge { min-width: 0; flex: 1; }
   .phase-drawing .canvas-stage { order: 1; padding: 0 !important; }
-  .phase-drawing .canvas-wrap, .phase-drawing #drawing-canvas { min-height: 510px; height: 66vh; }
+  .phase-drawing .canvas-wrap, .phase-drawing #drawing-canvas { min-height: 459px; height: 60vh; }
   .canvas-caption { top: 10px; }
   .canvas-colors { top: 52px; left: 9px; }
   .canvas-corrections { top: 9px; right: 9px; }

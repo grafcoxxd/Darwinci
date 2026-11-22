@@ -94,7 +94,8 @@ function broadcastRoom(room) {
       drawerId: room.game.drawerId,
       roundId: room.game.roundId,
       constraint: room.game.constraint,
-      difficulty: room.settings.difficulty
+      difficulty: room.settings.difficulty,
+      abilityEffects: room.game.abilityEffects || []
     };
     try {
       socket.emit("room:state", game.publicState(room, data.playerId));
@@ -210,6 +211,12 @@ io.on("connection", (socket) => {
     await mutateAndBroadcast(session.code, async (room) => {
       if (room.game.drawerId !== session.playerId) throw new Error("Nur der Zeichner kann abgeben.");
       game.finishDrawing(room);
+    });
+  }));
+
+  socket.on("agent:use", socketAction(socket, async (session) => {
+    await mutateAndBroadcast(session.code, async (room) => {
+      game.useAgentAbility(room, session.playerId);
     });
   }));
 

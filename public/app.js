@@ -198,7 +198,9 @@ function renderSettings(room) {
 
 function lobbyView(room) {
   const isHost = room.hostId === room.me;
-  const maxSaboteurs = room.players.length < 3 ? 0 : Math.floor((room.players.length - 1) / 2);
+  const maxSaboteurs = room.players.length === 2
+    ? 1
+    : room.players.length < 3 ? 0 : Math.floor((room.players.length - 1) / 2);
   const warnings = room.settings.saboteurCount > maxSaboteurs
     ? `${room.players.length < 3 ? "Testmodus" : "Hinweis"}: Es werden ${maxSaboteurs} Agenten verteilt.`
     : "Alle bereit für den Start";
@@ -288,6 +290,7 @@ function canvasView(room) {
   }).join("") : "";
   const color = constraint?.fixedColor || session.color;
   const handicaps = handicapRows(constraint);
+  const abilityCard = room.myAbility ? `<div class="ability-card ${room.myAbility.used ? "used" : ""}"><span class="eyebrow">EINMALIGE AGENTENFÄHIGKEIT</span><div class="ability-title"><b>${room.myAbility.icon}</b><strong>${escapeHtml(room.myAbility.name)}</strong></div><p>${escapeHtml(room.myAbility.description)}</p><button id="use-agent-ability" class="ability-button" ${room.myAbility.used ? "disabled" : ""}>${room.myAbility.used ? "Eingesetzt" : "Jetzt einsetzen"}</button></div>` : "";
   const secret = room.word ? `<div class="role-card secret-card"><span class="eyebrow">${isDrawer ? "GEHEIMES WORT" : "DEIN WISSEN"}</span><div class="secret-word">${escapeHtml(room.word)}</div>${isDrawer ? `<div class="handicap-list">${handicaps.map((item) => `<div class="handicap-item ${item.status || ""} ${item.black ? "black" : ""}"><span class="handicap-icon">${item.icon}</span><strong>${item.value}</strong><small>${item.text}</small></div>`).join("")}</div>` : ""}</div>` : "";
   return `<section class="main-stage canvas-stage panel">
     <div class="canvas-wrap"><canvas id="drawing-canvas" class="${isDrawer ? "" : "canvas-disabled"}"></canvas>
@@ -301,7 +304,7 @@ function canvasView(room) {
       <button id="finish-drawing" class="primary finish-floating">Zeichnung abgeben <span>→</span></button>` : '<div class="watching-badge"><span>● LIVE</span> Gemeinschaftlich im Voice-Chat raten</div>'}
     </div>
   </section>
-  <aside class="sidebar mission-sidebar panel"><div class="sidebar-heading"><div><span class="eyebrow">ZEICHENAUFTRAG</span><h3>${isDrawer ? "Dein Auftrag" : "Deine Mission"}</h3></div></div>${secret}
+  <aside class="sidebar mission-sidebar panel"><div class="sidebar-heading"><div><span class="eyebrow">ZEICHENAUFTRAG</span><h3>${isDrawer ? "Dein Auftrag" : "Deine Mission"}</h3></div></div>${secret}${abilityCard}
     <div class="score-card"><span>Punktestand</span><strong>${room.score === null ? "?" : `${room.score} / ${room.targetScore}`}</strong><small>${room.score === null ? "Bis zur Auflösung verdeckt" : "richtige Wörter für den Gruppensieg"}</small></div>
   </aside>`;
 }
@@ -415,6 +418,7 @@ function bindGameControls() {
   $("#next-round")?.addEventListener("click", () => session.socket.emit("game:next"));
   $("#reset-game")?.addEventListener("click", () => session.socket.emit("game:reset"));
   $("#finish-drawing")?.addEventListener("click", () => session.socket.emit("drawing:finish"));
+  $("#use-agent-ability")?.addEventListener("click", () => session.socket.emit("agent:use"));
   $("#guess-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
     session.socket.emit("guess:submit", { guess: $("#guess-input").value });
@@ -488,8 +492,8 @@ function redraw() {
   if (session.drawing && session.points.length) {
     const preview = {
       type: session.tool,
-      color: session.color,
-      width: session.width,
+      color: activeHeavyInk() ? "#151927" : session.color,
+      width: activeHeavyInk() ? 32 : session.width,
       points: session.points,
       from: session.draftFrom,
       to: session.draftTo
@@ -538,7 +542,10 @@ function drawShape(shape, rect) {
 }
 
 function mirrorPreview(shape) {
-  if (!session.room.constraint?.mirrorX) return shape;
+  const activeMirror = session.room.activeAbilityEffects?.some((effect) =>
+    effect.id === "mirror" && effect.expiresAt > Date.now()
+  );
+  if (Boolean(session.room.constraint?.mirrorX) === Boolean(activeMirror)) return shape;
   const mirrorPoint = (point) => point && ({ ...point, x: 1 - point.x });
   return {
     ...shape,
@@ -583,6 +590,9 @@ function pointerMove(event) {
 
 function canDrawCurrentTool() {
   if (!session.room || session.room.drawerId !== session.playerId || session.room.phase !== "drawing") return false;
+  if (session.room.activeAbilityEffects?.some((effect) =>
+    effect.id === "freeze" && effect.expiresAt > Date.now()
+  )) return false;
   const constraint = session.room.constraint;
   if (!constraint?.tools.includes(session.tool)) return false;
   if (constraint.maxItems && session.room.drawing.length >= constraint.maxItems) return false;
@@ -608,8 +618,8 @@ function pointerUp() {
   const mark = {
     roundId: session.roundId,
     type: session.tool,
-    color: session.color,
-    width: session.width,
+    color: activeHeavyInk() ? "#151927" : session.color,
+    width: activeHeavyInk() ? 32 : session.width,
     points: session.tool === "pen" ? session.points : undefined,
     from: session.tool === "pen" ? undefined : session.draftFrom,
     to: session.tool === "pen" ? undefined : session.draftTo
@@ -638,8 +648,8 @@ function emitDrawingPreview(force = false) {
   session.socket.emit("drawing:preview", {
     roundId: session.roundId,
     type: session.tool,
-    color: session.color,
-    width: session.width,
+    color: activeHeavyInk() ? "#151927" : session.color,
+    width: activeHeavyInk() ? 32 : session.width,
     points: session.tool === "pen" ? samplePreviewPoints(session.points) : undefined,
     from: session.tool === "pen" ? undefined : session.draftFrom,
     to: session.tool === "pen" ? undefined : session.draftTo
@@ -652,6 +662,12 @@ function samplePreviewPoints(points) {
   return Array.from({ length: 600 }, (_, index) => points[Math.round(index * stride)]);
 }
 
+function activeHeavyInk() {
+  return Boolean(session.room?.activeAbilityEffects?.some((effect) =>
+    effect.id === "heavy-ink" && effect.expiresAt > Date.now()
+  ));
+}
+
 function startBlindFade() {
   if (!session.room?.constraint?.hideExisting || session.room.drawerId !== session.playerId) return;
   if (!session.blindFadeStartedAt) session.blindFadeStartedAt = performance.now();
@@ -662,6 +678,14 @@ function runBlindFade() {
   cancelAnimationFrame(session.blindFadeFrame);
   const tick = () => {
     if (!session.canvas) return;
+    const blackout = session.room?.activeAbilityEffects?.some((effect) =>
+      effect.id === "blackout" && effect.expiresAt > Date.now()
+    );
+    if (blackout && session.room.drawerId === session.playerId) {
+      session.canvas.style.opacity = "0";
+      session.blindFadeFrame = requestAnimationFrame(tick);
+      return;
+    }
     const blind = session.room?.constraint?.hideExisting && session.room.drawerId === session.playerId;
     if (!blind || !session.blindFadeStartedAt) {
       session.canvas.style.opacity = "1";
@@ -698,8 +722,21 @@ setInterval(() => {
       const value = timer.querySelector("strong");
       if (value) value.textContent = formatTime(session.room.deadline);
     }
+    updateCanvasEffects();
   }
 }, 250);
+
+function updateCanvasEffects() {
+  if (!session.canvas || session.room?.phase !== "drawing") return;
+  const blackout = session.room.activeAbilityEffects?.some((effect) =>
+    effect.id === "blackout" && effect.expiresAt > Date.now()
+  );
+  if (blackout && session.room.drawerId === session.playerId) {
+    session.canvas.style.opacity = "0";
+  } else if (!session.room.constraint?.hideExisting || session.room.drawerId !== session.playerId) {
+    session.canvas.style.opacity = "1";
+  }
+}
 
 renderCharacters();
 if (session.code && session.playerId) connect();

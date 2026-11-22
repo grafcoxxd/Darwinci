@@ -74,6 +74,14 @@ const GEOMETRY_NAMES = {
   rectangle: ["Rechteck", "Rechtecke"]
 };
 
+const AGENT_ABILITIES = [
+  { id: "time-thief", name: "Zeitdieb", icon: "⏱", duration: 0, description: "Stiehlt 10 Sekunden von der laufenden Zeichenphase." },
+  { id: "blackout", name: "Licht aus", icon: "◐", duration: 5, description: "Der Zeichner sieht seine Leinwand 5 Sekunden lang nicht." },
+  { id: "mirror", name: "Spiegeltrick", icon: "⇄", duration: 7, description: "Die Eingabe des Zeichners wird 7 Sekunden horizontal gespiegelt." },
+  { id: "freeze", name: "Handschelle", icon: "⛓", duration: 4, description: "Der Stift des Zeichners blockiert 4 Sekunden lang." },
+  { id: "heavy-ink", name: "Tintenflut", icon: "●", duration: 7, description: "7 Sekunden lang wird alles neue in riesiger schwarzer Tinte gezeichnet." }
+];
+
 function createId(length = 22) {
   return crypto.randomBytes(length).toString("base64url").slice(0, length);
 }
@@ -170,6 +178,7 @@ function newRoom(hostName, character) {
       voteStartedAt: null,
       deadline: null,
       roundId: null,
+      abilityEffects: [],
       usedWords: [],
       pendingReveal: []
     },
@@ -186,6 +195,8 @@ function newPlayer(id, name, character) {
     character: CHARACTERS.some((item) => item.id === character) ? character : "fox",
     connected: false,
     role: null,
+    ability: null,
+    abilityUsed: false,
     alive: true,
     sittingOut: false,
     joinedAt: Date.now()
@@ -283,7 +294,9 @@ function startGame(room) {
     const swapIndex = crypto.randomInt(index + 1);
     [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
   }
-  const maxSaboteurs = room.players.length < 3 ? 0 : Math.floor((room.players.length - 1) / 2);
+  const maxSaboteurs = room.players.length === 2
+    ? 1
+    : room.players.length < 3 ? 0 : Math.floor((room.players.length - 1) / 2);
   shuffled.slice(0, Math.min(room.settings.saboteurCount, maxSaboteurs))
     .forEach((player) => { player.role = "saboteur"; });
   room.round = 0;
@@ -312,6 +325,7 @@ function startRound(room) {
 
   room.round += 1;
   room.game.roundId = createId(14);
+  room.game.abilityEffects = [];
   room.phase = "drawing";
   room.drawing = [];
   room.game.drawerId = drawer.id;
@@ -323,6 +337,13 @@ function startRound(room) {
   room.game.voteStartedAt = null;
   room.game.deadline = Date.now() + Math.max(10, Math.round(room.settings.drawTime * (constraint.timeFactor || 1))) * 1000;
   room.game.usedWords.push(word);
+  const abilityPool = AGENT_ABILITIES.filter((ability) => ability.id !== "mirror" || !constraint.mirrorX);
+  room.players.forEach((player) => {
+    player.ability = player.role === "saboteur" && player.alive
+      ? abilityPool[crypto.randomInt(abilityPool.length)].id
+      : null;
+    player.abilityUsed = false;
+  });
 }
 
 function submitGuess(room, playerId, guess) {
@@ -355,10 +376,56 @@ function drawingUsage(room) {
   }, {});
 }
 
+function activeAbilityEffects(room, now = Date.now()) {
+  return (room.game.abilityEffects || []).filter((effect) => effect.expiresAt > now);
+}
+
+function hasAbilityEffect(room, id) {
+  return activeAbilityEffects(room).some((effect) => effect.id === id);
+}
+
+function mirrorDrawing(room, point) {
+  return Boolean(room.game.constraint?.mirrorX) !== hasAbilityEffect(room, "mirror")
+    ? { ...point, x: 1 - point.x }
+    : point;
+}
+
+function drawingStrokeStyle(room, color, width) {
+  if (hasAbilityEffect(room, "heavy-ink")) {
+    return { color: "#151927", width: 32 };
+  }
+  return { color, width };
+}
+
+function useAgentAbility(room, playerId) {
+  if (room.phase !== "drawing") throw new Error("Agentenfähigkeiten sind nur während des Zeichnens einsetzbar.");
+  const player = room.players.find((item) => item.id === playerId);
+  if (!player || player.role !== "saboteur" || !player.alive || player.sittingOut) {
+    throw new Error("Nur aktive Agenten dürfen eine Fähigkeit einsetzen.");
+  }
+  if (!player.ability || player.abilityUsed) throw new Error("Deine Fähigkeit wurde bereits eingesetzt.");
+  const ability = AGENT_ABILITIES.find((item) => item.id === player.ability);
+  if (!ability) throw new Error("Fähigkeit nicht verfügbar.");
+  player.abilityUsed = true;
+  if (ability.id === "time-thief") {
+    room.game.deadline = Math.max(Date.now() + 3000, room.game.deadline - 10_000);
+  } else {
+    room.game.abilityEffects = activeAbilityEffects(room);
+    room.game.abilityEffects.push({
+      id: ability.id,
+      usedBy: playerId,
+      roundId: room.game.roundId,
+      expiresAt: Date.now() + ability.duration * 1000
+    });
+  }
+  return ability;
+}
+
 function addDrawingItem(room, playerId, input) {
   if (room.phase !== "drawing") throw new Error("Die Zeichenphase ist beendet.");
   if (room.game.drawerId !== playerId) throw new Error("Nur der Zeichner darf die Leinwand benutzen.");
   if (input.roundId !== room.game.roundId) throw new Error("Die Zeichnung gehört zu einer alten Runde.");
+  if (hasAbilityEffect(room, "freeze")) throw new Error("Der Stift ist gerade durch eine Agentenfähigkeit blockiert.");
   const constraint = compatibleConstraint(room.game.constraint, room.settings.difficulty);
   room.game.constraint = constraint;
   const type = String(input.type || "");
@@ -371,14 +438,15 @@ function addDrawingItem(room, playerId, input) {
   if (constraint.maxItems && room.drawing.length >= constraint.maxItems) {
     throw new Error("Das Formenlimit für diese Runde ist erreicht.");
   }
-  const color = /^#[0-9a-f]{6}$/i.test(input.color) ? input.color : "#151927";
+  let color = /^#[0-9a-f]{6}$/i.test(input.color) ? input.color : "#151927";
   if (constraint.singleColor && room.drawing[0] && color !== room.drawing[0].color) {
     throw new Error("In dieser Runde ist nur eine Farbe erlaubt.");
   }
   if (constraint.fixedColor && color !== constraint.fixedColor) {
     throw new Error("Diese Runde erfordert die festgelegte Farbe.");
   }
-  const width = Math.max(1, Math.min(32, Number(input.width) || 4));
+  let width = Math.max(1, Math.min(32, Number(input.width) || 4));
+  ({ color, width } = drawingStrokeStyle(room, color, width));
   const clampPoint = (point) => ({
     x: Math.max(0, Math.min(1, Number(point?.x) || 0)),
     y: Math.max(0, Math.min(1, Number(point?.y) || 0))
@@ -395,12 +463,9 @@ function addDrawingItem(room, playerId, input) {
       throw new Error("Ziehe die Form etwas größer.");
     }
   }
-  if (constraint.mirrorX) {
-    const mirror = (point) => ({ ...point, x: 1 - point.x });
-    if (item.points) item.points = item.points.map(mirror);
-    if (item.from) item.from = mirror(item.from);
-    if (item.to) item.to = mirror(item.to);
-  }
+  if (item.points) item.points = item.points.map((point) => mirrorDrawing(room, point));
+  if (item.from) item.from = mirrorDrawing(room, item.from);
+  if (item.to) item.to = mirrorDrawing(room, item.to);
   room.drawing.push(item);
 }
 
@@ -420,6 +485,9 @@ function createDrawingPreview(drawState, playerId, input) {
     throw new Error("Nur der Zeichner darf eine Live-Vorschau senden.");
   }
   if (input.roundId !== drawState.roundId) throw new Error("Die Vorschau gehört zu einer alten Runde.");
+  if (activeAbilityEffects({ game: drawState }).some((effect) => effect.id === "freeze")) {
+    throw new Error("Der Stift ist gerade blockiert.");
+  }
   const constraint = compatibleConstraint(drawState.constraint, drawState.difficulty);
   const type = String(input.type || "");
   if (!constraint.tools.includes(type)) throw new Error("Dieses Werkzeug ist nicht erlaubt.");
@@ -434,6 +502,9 @@ function createDrawingPreview(drawState, playerId, input) {
     width: Math.max(1, Math.min(32, Number(input.width) || 4))
   };
   if (constraint.fixedColor) preview.color = constraint.fixedColor;
+  const style = drawingStrokeStyle({ game: drawState }, preview.color, preview.width);
+  preview.color = style.color;
+  preview.width = style.width;
   if (type === "pen") {
     preview.points = Array.isArray(input.points) ? input.points.slice(0, 700).map(clampPoint) : [];
     if (!preview.points.length) throw new Error("Die Vorschau enthält keine Punkte.");
@@ -441,7 +512,7 @@ function createDrawingPreview(drawState, playerId, input) {
     preview.from = clampPoint(input.from);
     preview.to = clampPoint(input.to);
   }
-  if (constraint.mirrorX) {
+  if (constraint.mirrorX !== activeAbilityEffects({ game: drawState }).some((effect) => effect.id === "mirror")) {
     const mirror = (point) => ({ ...point, x: 1 - point.x });
     if (preview.points) preview.points = preview.points.map(mirror);
     if (preview.from) preview.from = mirror(preview.from);
@@ -553,12 +624,15 @@ function resetToLobby(room) {
   room.drawing = [];
   room.game = {
     drawerId: null, word: null, constraint: null, guess: "", correct: null,
-    votes: {}, voteStartedAt: null, deadline: null, roundId: null, usedWords: [], pendingReveal: []
+    votes: {}, voteStartedAt: null, deadline: null, roundId: null, usedWords: [], pendingReveal: [],
+    abilityEffects: []
   };
   room.players.forEach((player) => {
     player.role = null;
     player.alive = true;
     player.sittingOut = false;
+    player.ability = null;
+    player.abilityUsed = false;
   });
 }
 
@@ -597,6 +671,10 @@ function publicState(room, viewerId) {
     me: viewerId,
     myRole: viewer.role,
     drawerId: room.game.drawerId,
+    activeAbilityEffects: activeAbilityEffects(room).map(({ id, expiresAt }) => ({ id, expiresAt })),
+    myAbility: viewer.role === "saboteur" && viewer.ability
+      ? { ...AGENT_ABILITIES.find((ability) => ability.id === viewer.ability), used: viewer.abilityUsed }
+      : null,
     constraint: viewerId === room.game.drawerId && room.phase === "drawing" ? constraint : null,
     drawingUsage: drawingUsage(room),
     word: showWord ? room.game.word : null,
@@ -634,5 +712,5 @@ function publicState(room, viewerId) {
 module.exports = {
   addDrawingItem, addPlayer, advanceTimers, castVote, CHARACTERS, clearDrawing, createDrawingPreview,
   finishDrawing, leaveRoom, newRoom, publicState, resetToLobby, resolveVoting,
-  sanitizeSettings, startGame, startRound, submitGuess, undoDrawing
+  sanitizeSettings, startGame, startRound, submitGuess, undoDrawing, useAgentAbility
 };

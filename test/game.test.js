@@ -165,6 +165,39 @@ test("creates mirrored live previews without changing the persisted drawing", ()
   assert.deepEqual(preview.points[1], { x: 0.6, y: 0.6 });
 });
 
+test("assigns an agent in a two-player game and one ability per round", () => {
+  const room = game.newRoom("Alice", "fox");
+  game.addPlayer(room, "Bob", "frog");
+  game.startGame(room);
+  const agents = room.players.filter((player) => player.role === "saboteur");
+
+  assert.equal(agents.length, 1);
+  assert.ok(agents[0].ability);
+  assert.equal(agents[0].abilityUsed, false);
+  assert.equal(game.publicState(room, agents[0].id).myAbility.used, false);
+});
+
+test("agent abilities can only be used once and may freeze the drawer", () => {
+  const room = createReadyRoom();
+  game.startGame(room);
+  const agent = room.players.find((player) => player.role === "saboteur");
+  agent.ability = "freeze";
+
+  game.useAgentAbility(room, agent.id);
+  assert.equal(agent.abilityUsed, true);
+  assert.equal(room.game.abilityEffects.some((effect) => effect.id === "freeze"), true);
+  assert.throws(() => game.useAgentAbility(room, agent.id), /bereits/);
+  assert.throws(() => game.addDrawingItem(room, room.game.drawerId, {
+    roundId: room.game.roundId,
+    type: room.game.constraint.tools[0],
+    color: "#151927",
+    width: 4,
+    points: [{ x: 0.1, y: 0.1 }],
+    from: { x: 0.1, y: 0.1 },
+    to: { x: 0.5, y: 0.5 }
+  }), /blockiert/);
+});
+
 test("random geometry restrictions distribute exactly five forms", () => {
   const distributions = new Set();
   const room = createReadyRoom();
