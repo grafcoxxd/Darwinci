@@ -385,7 +385,7 @@ function addDrawingItem(room, playerId, input) {
   });
   const item = { type, color, width, roundId: room.game.roundId };
   if (type === "pen") {
-    const points = Array.isArray(input.points) ? input.points.slice(0, 2000).map(clampPoint) : [];
+    const points = Array.isArray(input.points) ? input.points.slice(0, 5000).map(clampPoint) : [];
     if (!points.length) throw new Error("Der Strich enthält keine Punkte.");
     item.points = points;
   } else {

@@ -546,10 +546,20 @@ function pointerMove(event) {
   const point = pointerPoint(event);
   session.draftTo = point;
   if (session.tool === "pen") {
-    session.points.push(point);
-    if (session.points.length > 1000) session.points.splice(1, 1);
+    appendPenPoint(session.points, point);
   }
   redraw();
+}
+
+function appendPenPoint(points, point) {
+  const previous = points.at(-1);
+  if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 0.0008) return;
+  points.push(point);
+  if (points.length > 2400) {
+    const compacted = points.filter((_, index) => index % 2 === 0);
+    if (compacted.at(-1) !== points.at(-1)) compacted.push(points.at(-1));
+    points.splice(0, points.length, ...compacted);
+  }
 }
 
 function pointerUp() {

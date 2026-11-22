@@ -109,6 +109,33 @@ test("rejects disallowed tools and correction controls", () => {
   );
 });
 
+test("preserves complete long freehand strokes", () => {
+  const room = createReadyRoom();
+  game.startGame(room);
+  room.game.constraint = {
+    id: "pen-test",
+    label: "Freihand",
+    tools: ["pen"]
+  };
+  const points = Array.from({ length: 3000 }, (_, index) => ({
+    x: 0.05 + (index % 1000) / 1000 * 0.9,
+    y: 0.5 + Math.sin(index / 25) * 0.3
+  }));
+  game.addDrawingItem(room, room.game.drawerId, {
+    roundId: room.game.roundId,
+    type: "pen",
+    color: "#151927",
+    width: 12,
+    points
+  });
+
+  const stored = room.drawing[0].points;
+  assert.equal(stored.length, 3000);
+  assert.deepEqual(stored[0], points[0]);
+  assert.deepEqual(stored.at(-1), points.at(-1));
+  assert.ok(stored.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)));
+});
+
 test("random geometry restrictions distribute exactly five forms", () => {
   const distributions = new Set();
   const room = createReadyRoom();
