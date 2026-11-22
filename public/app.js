@@ -97,6 +97,8 @@ function leaveSession() {
   sessionStorage.removeItem("ss_player");
   if (session.socket) session.socket.disconnect();
   session.socket = null;
+  $("#app").classList.remove("game-active");
+  $(".brand").classList.remove("hidden");
   $("#game").classList.add("hidden");
   $("#entry").classList.remove("hidden");
 }
@@ -166,11 +168,16 @@ function renderSettings(room) {
     </select></label>
     <label class="setting-row">Wort-Paket<select name="wordPack" ${!isHost ? "disabled" : ""}>${room.wordPacks.map(pack => `<option value="${pack.id}" ${s.wordPack === pack.id ? "selected" : ""}>${pack.label}</option>`).join("")}</select></label>
     <label class="setting-row custom-words ${["custom", "mix"].includes(s.wordPack) ? "" : "hidden"}">Eigene Wörter<textarea name="customWords" rows="4" placeholder="Ein Begriff pro Zeile oder mit Kommas getrennt" ${!isHost ? "disabled" : ""}>${escapeHtml(s.customWords)}</textarea></label>
-    <label class="setting-row">Auflösung<select name="revealTiming" ${!isHost ? "disabled" : ""}><option value="immediate" ${s.revealTiming === "immediate" ? "selected" : ""}>Nach jeder Abstimmung</option><option value="end" ${s.revealTiming === "end" ? "selected" : ""}>Erst am Spielende</option></select></label>
-    <label class="setting-row">Ausscheiden<select name="eliminationMode" ${!isHost ? "disabled" : ""}><option value="classic" ${s.eliminationMode === "classic" ? "selected" : ""}>Bis zum Ende raus</option><option value="sitout" ${s.eliminationMode === "sitout" ? "selected" : ""}>Nur nächste Runde aussetzen</option></select></label>
     <label class="setting-row score-target">Benötigte Punkte<input type="number" name="targetScore" min="1" max="20" value="${room.targetScore}" ${!isHost ? "disabled" : ""}><small>Empfehlung für ${room.players.length} Spieler: ${room.recommendedTargetScore} Punkte. 1 richtiges Wort = 1 Punkt.</small></label>
-    <label class="setting-row">Siegbedingung<select name="winMode" ${!isHost ? "disabled" : ""}><option value="score" ${s.winMode !== "rounds" ? "selected" : ""}>Punktsieg oder Enttarnung</option><option value="rounds" ${s.winMode === "rounds" ? "selected" : ""}>Zusätzlich mit Rundenmaximum</option></select></label>
-    <label class="setting-row ${s.winMode === "rounds" ? "" : "hidden"}">Maximale Runden<input type="number" min="1" max="30" name="maxRounds" value="${s.maxRounds}" ${!isHost ? "disabled" : ""}></label>
+    <details class="advanced-settings" ${s.revealTiming !== "immediate" || s.eliminationMode !== "classic" || s.winMode === "rounds" ? "open" : ""}>
+      <summary>Weitere Regeln <span>⌄</span></summary>
+      <div class="advanced-grid">
+        <label class="setting-row">Auflösung<select name="revealTiming" ${!isHost ? "disabled" : ""}><option value="immediate" ${s.revealTiming === "immediate" ? "selected" : ""}>Nach jeder Abstimmung</option><option value="end" ${s.revealTiming === "end" ? "selected" : ""}>Erst am Spielende</option></select></label>
+        <label class="setting-row">Ausscheiden<select name="eliminationMode" ${!isHost ? "disabled" : ""}><option value="classic" ${s.eliminationMode === "classic" ? "selected" : ""}>Bis zum Ende raus</option><option value="sitout" ${s.eliminationMode === "sitout" ? "selected" : ""}>Nur nächste Runde aussetzen</option></select></label>
+        <label class="setting-row">Siegbedingung<select name="winMode" ${!isHost ? "disabled" : ""}><option value="score" ${s.winMode !== "rounds" ? "selected" : ""}>Punktsieg oder Enttarnung</option><option value="rounds" ${s.winMode === "rounds" ? "selected" : ""}>Zusätzlich mit Rundenmaximum</option></select></label>
+        <label class="setting-row ${s.winMode === "rounds" ? "" : "hidden"}">Maximale Runden<input type="number" min="1" max="30" name="maxRounds" value="${s.maxRounds}" ${!isHost ? "disabled" : ""}></label>
+      </div>
+    </details>
   </form>`;
 }
 
@@ -181,21 +188,21 @@ function lobbyView(room) {
     ? `${room.players.length < 3 ? "Testmodus" : "Hinweis"}: Es werden ${maxSaboteurs} Saboteure verteilt.`
     : "Alle bereit für den Start";
   return `
-    <aside class="sidebar panel"><h3>Spieler · ${room.players.length}/12</h3>${renderPlayerList(room)}</aside>
-    <section class="main-stage panel">
+    <aside class="sidebar lobby-players panel"><div class="sidebar-heading"><div><span class="eyebrow">RAUMBELEGUNG</span><h3>Spieler</h3></div><strong class="count-badge">${room.players.length}/12</strong></div>${renderPlayerList(room)}</aside>
+    <section class="main-stage lobby-main panel">
       <div class="lobby-hero">
         <span class="eyebrow">LOBBY IST OFFEN</span><h2>Die Runde versammelt sich</h2>
-        <p>Teilt den Lobby-Code oder den Link. Charaktere sind rein optisch.</p>
-        <div class="lobby-code">${room.code}</div>
+        <p>Teilt den Code und wartet, bis alle bereit sind.</p>
+        <button class="invite-code" data-copy-code title="Lobby-Code kopieren"><span>LOBBY-CODE</span><strong>${room.code}</strong><b>⧉</b></button>
         <div class="waiting-seats">${room.players.slice(0, 8).map(player => `<div class="waiting-seat"><div class="avatar" style="background:${player.character.color}24">${player.character.icon}</div><b>${escapeHtml(player.name)}</b></div>`).join("")}
           ${Array.from({ length: Math.max(0, 4 - room.players.length) }, () => '<div class="waiting-seat"><span class="empty-seat">+</span></div>').join("")}
         </div>
-        <p class="${room.settings.saboteurCount > maxSaboteurs ? "danger-text" : "success-text"}">${warnings}</p>
-        ${isHost ? '<button id="start-game" class="primary">Spiel starten <span>→</span></button>' : '<p class="hint">Der Host startet das Spiel.</p>'}
+        <div class="ready-strip ${room.settings.saboteurCount > maxSaboteurs ? "warning" : ""}"><span class="status-dot"></span><span>${warnings}</span></div>
+        ${isHost ? '<button id="start-game" class="primary start-button">Runde starten <span>→</span></button>' : '<div class="waiting-host">Der Host startet die Runde</div>'}
       </div>
     </section>
-    <aside class="sidebar panel"><h3>Lobby-Regeln</h3>${renderSettings(room)}
-      <p class="hint">Änderungen werden direkt für alle gespeichert.</p>
+    <aside class="sidebar lobby-settings panel"><div class="sidebar-heading"><div><span class="eyebrow">KONFIGURATION</span><h3>Spielregeln</h3></div><span class="save-indicator">● Gespeichert</span></div>${renderSettings(room)}
+      <p class="hint">${isHost ? "Du änderst die Regeln für alle." : "Nur der Host kann Regeln ändern."}</p>
     </aside>`;
 }
 
@@ -231,42 +238,41 @@ function canvasView(room) {
     </button>`;
   }).join("") : "";
   const color = constraint?.fixedColor || session.color;
-  const secret = room.word ? `<div class="role-card"><span>GEHEIMES WORT</span><div class="secret-word">${escapeHtml(room.word)}</div>${constraint ? `<p>Einschränkung: <strong>${escapeHtml(constraint.label)}</strong></p>` : ""}</div>` : "";
-  return `<section class="main-stage panel">
-    <span class="eyebrow">RUNDE ${room.round}</span>
-    <h2>${escapeHtml(drawer?.name || "Jemand")} ${isDrawer ? "– du zeichnest" : "zeichnet jetzt"}</h2>
-    ${isDrawer ? `<div class="tool-palette">${toolHtml}</div><div class="canvas-tools"><span class="hint">Farbe & Linie</span>${["#151927", "#ef4444", "#3b82f6", "#22c55e", "#f59e0b"].map((swatch) => `<button class="color-swatch ${color === swatch ? "selected" : ""}" data-color="${swatch}" ${constraint.fixedColor && swatch !== constraint.fixedColor ? "disabled" : ""} style="background:${swatch}" aria-label="Farbe ${swatch}"></button>`).join("")}
-      <select id="stroke-width" class="width-select"><option value="2" ${session.width === 2 ? "selected" : ""}>Fein</option><option value="4" ${session.width === 4 ? "selected" : ""}>Mittel</option><option value="8" ${session.width === 8 ? "selected" : ""}>Dick</option></select>
-      ${constraint.allowUndo === false ? "" : '<button id="undo-canvas" class="secondary" title="Letzte Form rückgängig">↶</button>'}
-      ${constraint.allowClear === false ? "" : '<button id="clear-canvas" class="secondary">Löschen</button>'}</div>
-      <p class="constraint-status" id="constraint-status">${constraint.singleColor ? "Eine Farbe bleibt nach dem ersten Zeichenobjekt festgelegt." : "Werkzeuge und Kontingente werden vom Server geprüft."}</p>` : ""}
+  const secret = room.word ? `<div class="role-card secret-card"><span class="eyebrow">${isDrawer ? "GEHEIMES WORT" : "DEIN WISSEN"}</span><div class="secret-word">${escapeHtml(room.word)}</div>${constraint ? `<p class="constraint-copy">${escapeHtml(constraint.label)}</p>` : ""}</div>` : "";
+  return `<section class="main-stage canvas-stage panel">
+    <div class="stage-title-row"><div><span class="eyebrow">ZEICHNUNG · RUNDE ${room.round}</span><h2>${isDrawer ? "Du bist am Stift" : `${escapeHtml(drawer?.name || "Jemand")} zeichnet`}</h2></div><div class="drawer-chip"><span>${isDrawer ? "✎" : drawer?.character.icon || "✎"}</span>${isDrawer ? "Zeichner" : "Zuschauen"}</div></div>
+    ${isDrawer ? `<div class="drawing-toolbar"><div class="tool-palette">${toolHtml}</div><div class="canvas-tools">${["#151927", "#ef4444", "#3b82f6", "#22c55e", "#f59e0b"].map((swatch) => `<button class="color-swatch ${color === swatch ? "selected" : ""}" data-color="${swatch}" ${constraint.fixedColor && swatch !== constraint.fixedColor ? "disabled" : ""} style="background:${swatch}" aria-label="Farbe ${swatch}"></button>`).join("")}
+      <select id="stroke-width" class="width-select" aria-label="Strichbreite"><option value="2" ${session.width === 2 ? "selected" : ""}>2 px</option><option value="4" ${session.width === 4 ? "selected" : ""}>4 px</option><option value="8" ${session.width === 8 ? "selected" : ""}>8 px</option></select>
+      ${constraint.allowUndo === false ? "" : '<button id="undo-canvas" class="secondary icon-button" title="Letzte Form rückgängig" aria-label="Rückgängig">↶</button>'}
+      ${constraint.allowClear === false ? "" : '<button id="clear-canvas" class="secondary" aria-label="Leinwand löschen">Leeren</button>'}</div></div>
+      <div class="constraint-strip"><b>⚡ Einschränkung</b><span>${escapeHtml(constraint.label)}</span></div>` : ""}
     <div class="canvas-wrap"><canvas id="drawing-canvas" class="${isDrawer ? "" : "canvas-disabled"}"></canvas></div>
-    ${isDrawer ? '<div class="action-bar"><button id="finish-drawing" class="primary">Zeichnung abgeben <span>→</span></button></div>' : '<p class="hint">Diskutiert im Voice-Chat, was dargestellt werden könnte.</p>'}
+    <div class="canvas-footer">${isDrawer ? '<span>Wenn du fertig bist, kann die Gruppe raten.</span><button id="finish-drawing" class="primary finish-button">Zeichnung abgeben <span>→</span></button>' : '<span class="live-indicator">● LIVE</span><span>Diskutiert über Voice-Chat und einigt euch auf eure Vermutung.</span>'}</div>
   </section>
-  <aside class="sidebar panel"><h3>Deine Information</h3>${rolePanel(room)}${secret}
-    <p class="hint">Punktestand: <strong>${room.score === null ? "verdeckst" : `${room.score} / ${room.targetScore}`}</strong>${room.score === null ? "" : " richtige Wörter"}</p>
+  <aside class="sidebar mission-sidebar panel"><div class="sidebar-heading"><div><span class="eyebrow">DEINE MISSION</span><h3>Geheime Infos</h3></div></div>${rolePanel(room)}${secret}
+    <div class="score-card"><span>Punktestand</span><strong>${room.score === null ? "?" : `${room.score} / ${room.targetScore}`}</strong><small>${room.score === null ? "Bis zur Auflösung verdeckt" : "richtige Wörter für den Gruppensieg"}</small></div>
   </aside>`;
 }
 
 function guessingView(room) {
-  return `<section class="main-stage panel">
-    <div class="guess-box"><span class="eyebrow">WORT DER GRUPPE</span><h2>Einigt euch auf genau eine Lösung</h2>
-      <p class="result-copy">Der Begriff bleibt vorerst geheim – erst nach der Abstimmung wird je nach Lobby-Regel aufgelöst.</p>
+  return `<section class="main-stage decision-stage panel">
+    <div class="guess-box"><div class="decision-icon">?</div><span class="eyebrow">GEMEINSAME LÖSUNG</span><h2>Welches Wort sucht die Gruppe?</h2>
+      <p class="result-copy">Sprecht euch ab und meldet genau einen Begriff an. Ob er richtig ist, bleibt zunächst geheim.</p>
       ${room.canGuess ? `<form id="guess-form"><input id="guess-input" maxlength="50" value="${escapeHtml(session.guessDraft)}" placeholder="Euer endgültiges Lösungswort" autocomplete="off" required><button class="primary">Einloggen →</button></form>` : '<p class="hint">Wartet auf die gemeinsame Lösung.</p>'}
-      <p class="hint">Jeder aktive Spieler außer dem Zeichner kann die Einigung einloggen.</p>
+      <p class="decision-note">Jede aktive Person außer dem Zeichner kann den abgestimmten Begriff einloggen.</p>
     </div>
-  </section><aside class="sidebar panel"><h3>Deine Information</h3>${rolePanel(room)}</aside>`;
+  </section><aside class="sidebar mission-sidebar panel"><div class="sidebar-heading"><div><span class="eyebrow">DEINE MISSION</span><h3>Geheime Infos</h3></div></div>${rolePanel(room)}</aside>`;
 }
 
 function votingView(room) {
   const eligible = room.players.filter((p) => p.alive && !p.sittingOut && p.id !== room.me);
-  return `<section class="main-stage panel"><div class="result">
-    <span class="eyebrow">EURE LÖSUNG</span><h2>${escapeHtml(room.guess)}</h2>
-    <p class="result-copy">Wer hat die Runde beeinflusst? Eure Stimmen bleiben verdeckt.</p>
+  return `<section class="main-stage decision-stage panel"><div class="vote-stage">
+    <span class="eyebrow">EURE EINGELOGGTE LÖSUNG</span><div class="locked-guess">„${escapeHtml(room.guess)}“</div>
+    <h2>Wen haltet ihr für verdächtig?</h2><p class="result-copy">Wählt eine Person. Eure Stimmen bleiben bis zur Auswertung verdeckt.</p>
     <div class="vote-grid">${eligible.map((player) => `<button class="vote-player" data-vote="${player.id}" ${room.hasVoted ? "disabled" : ""}>
-      <div class="avatar" style="background:${player.character.color}24">${player.character.icon}</div><strong>${escapeHtml(player.name)}</strong></button>`).join("")}</div>
-    <p class="hint">Abgegeben: ${room.votesCast} von ${room.activeVoters}${room.hasVoted ? " · Deine Stimme ist gespeichert." : ""}</p>
-  </div></section><aside class="sidebar panel"><h3>Deine Information</h3>${rolePanel(room)}<p class="hint">Das Wort wird erst nach Abschluss aller Stimmen ausgewertet.</p></aside>`;
+      <div class="avatar" style="background:${player.character.color}24">${player.character.icon}</div><div><strong>${escapeHtml(player.name)}</strong><span>Als Saboteur verdächtigen</span></div></button>`).join("")}</div>
+    <div class="vote-progress"><strong>${room.votesCast} / ${room.activeVoters}</strong> Stimmen abgegeben${room.hasVoted ? " · Deine Stimme ist gespeichert" : ""}</div>
+  </div></section><aside class="sidebar mission-sidebar panel"><div class="sidebar-heading"><div><span class="eyebrow">DEINE MISSION</span><h3>Geheime Infos</h3></div></div>${rolePanel(room)}<p class="hint">Erst wenn alle abgestimmt haben, wird ausgewertet.</p></aside>`;
 }
 
 function resultView(room) {
@@ -308,10 +314,12 @@ function renderGame() {
     room.phase === "guessing" ? guessingView(room) :
     room.phase === "voting" ? votingView(room) :
     room.phase === "result" ? resultView(room) : gameoverView(room);
-  $("#game").innerHTML = `<div class="game-shell">
-    <header class="game-header panel"><div><h2>Darwinci</h2><div class="lobby-code">LOBBY ${room.code}</div></div>
-      <div class="phase-pill"><strong>${phaseText(room.phase)}</strong> ${room.round ? `· Runde ${room.round}` : ""}</div>
-      <div class="header-actions"><div class="timer" id="phase-timer">${formatTime(room.deadline)}</div><button id="leave-room" class="secondary compact">Verlassen</button></div>
+  $("#app").classList.add("game-active");
+  $(".brand").classList.add("hidden");
+  $("#game").innerHTML = `<div class="game-shell phase-${room.phase}">
+    <header class="game-header panel"><div class="game-brand"><span class="brand-mark">✦</span><div><strong>Darwinci</strong><button data-copy-code class="inline-code">LOBBY ${room.code}</button></div></div>
+      <div class="phase-track"><div class="phase-current"><span>${phaseText(room.phase)}</span><strong>${room.round ? `Runde ${room.round}` : "Lobby"}</strong></div><div class="phase-steps"><span class="${room.phase === "drawing" ? "active" : ""}">Zeichnen</span><i></i><span class="${room.phase === "guessing" ? "active" : ""}">Raten</span><i></i><span class="${room.phase === "voting" ? "active" : ""}">Abstimmen</span></div></div>
+      <div class="header-actions"><div class="goal-stat"><span>ZIEL</span><strong>${room.score === null ? "?" : room.score}/${room.targetScore}</strong></div><div class="timer" id="phase-timer"><span>ZEIT</span><strong>${formatTime(room.deadline)}</strong></div><button id="leave-room" class="secondary compact" aria-label="Lobby verlassen">Verlassen</button></div>
     </header>
     ${room.phase !== "lobby" && room.phase !== "gameover" ? `<aside class="sidebar panel"><h3>Spieler · ${room.players.filter(p => p.alive).length} aktiv</h3>${renderPlayerList(room)}</aside>` : ""}
     ${stage}
@@ -329,6 +337,14 @@ function renderGame() {
 function bindGameControls() {
   const room = session.room;
   $("#start-game")?.addEventListener("click", () => session.socket.emit("game:start"));
+  $$("[data-copy-code]").forEach((button) => button.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(room.code);
+      toast(`Lobby-Code ${room.code} kopiert.`);
+    } catch {
+      toast(`Lobby-Code: ${room.code}`);
+    }
+  }));
   $("#leave-room")?.addEventListener("click", () => {
     if (room.phase !== "lobby" && !confirm("Das laufende Spiel wirklich verlassen? Du wirst als ausgeschieden gewertet.")) return;
     session.socket.emit("lobby:leave");
@@ -539,7 +555,10 @@ window.addEventListener("resize", () => {
 setInterval(() => {
   if (session.room) {
     const timer = $("#phase-timer");
-    if (timer) timer.textContent = formatTime(session.room.deadline);
+    if (timer) {
+      const value = timer.querySelector("strong");
+      if (value) value.textContent = formatTime(session.room.deadline);
+    }
   }
 }, 250);
 
