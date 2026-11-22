@@ -40,6 +40,75 @@ test("shows target word to saboteurs and constraint only to drawer", () => {
   );
 });
 
+test("enforces drawing tool limits and rejects stale round marks", () => {
+  const room = createReadyRoom();
+  game.startGame(room);
+  const constraint = {
+    id: "test-limit",
+    label: "Maximal 1 Linie",
+    tools: ["line"],
+    limits: { line: 1 }
+  };
+  room.game.constraint = constraint;
+  const drawer = room.game.drawerId;
+  const mark = {
+    roundId: room.game.roundId,
+    type: "line",
+    color: "#151927",
+    width: 4,
+    from: { x: 0.1, y: 0.1 },
+    to: { x: 0.8, y: 0.8 }
+  };
+  game.addDrawingItem(room, drawer, mark);
+  assert.throws(() => game.addDrawingItem(room, drawer, mark), /Kontingent/);
+  assert.throws(
+    () => game.addDrawingItem(room, drawer, { ...mark, roundId: "old-round" }),
+    /alten Runde/
+  );
+});
+
+test("new rounds receive a new canvas identity and empty drawing", () => {
+  const room = createReadyRoom();
+  game.startGame(room);
+  const firstRoundId = room.game.roundId;
+  room.drawing.push({ type: "line", color: "#151927", width: 4 });
+
+  game.finishDrawing(room);
+  game.startRound(room);
+
+  assert.notEqual(room.game.roundId, firstRoundId);
+  assert.equal(room.drawing.length, 0);
+});
+
+test("rejects disallowed tools and correction controls", () => {
+  const room = createReadyRoom();
+  game.startGame(room);
+  room.game.constraint = {
+    id: "strict-test",
+    label: "Nur Linie, ohne Korrektur",
+    tools: ["line"],
+    allowClear: false,
+    allowUndo: false
+  };
+
+  assert.throws(() => game.addDrawingItem(room, room.game.drawerId, {
+    roundId: room.game.roundId,
+    type: "ellipse",
+    color: "#151927",
+    width: 4,
+    from: { x: 0.1, y: 0.1 },
+    to: { x: 0.8, y: 0.8 }
+  }), /nicht erlaubt/);
+  assert.throws(
+    () => game.clearDrawing(room, room.game.drawerId, room.game.roundId),
+    /verboten/
+  );
+  assert.throws(
+    () => game.undoDrawing(room, room.game.drawerId, room.game.roundId),
+    /verboten/
+  );
+});
+
 test("records one hidden vote result and reveals game roles at game over", () => {
   const room = createReadyRoom();
   game.startGame(room);

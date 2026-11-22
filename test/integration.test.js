@@ -93,10 +93,14 @@ test("four clients complete a full drawing, guessing and voting round", async ()
     assert.equal(drawing[drawerIndex].drawing.length, 0);
 
     const strokeState = waitForState(players[drawerIndex].socket, (state) => state.drawing.length === 1);
-    players[drawerIndex].socket.emit("drawing:stroke", {
+    players[drawerIndex].socket.emit("drawing:mark", {
+      roundId: drawing[drawerIndex].roundId,
+      type: drawing[drawerIndex].constraint.tools[0],
       color: "#151927",
       width: 4,
-      points: [{ x: 0.2, y: 0.2 }, { x: 0.7, y: 0.8 }]
+      points: [{ x: 0.2, y: 0.2 }, { x: 0.7, y: 0.8 }],
+      from: { x: 0.2, y: 0.2 },
+      to: { x: 0.7, y: 0.8 }
     });
     await strokeState;
 

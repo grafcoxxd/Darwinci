@@ -171,31 +171,21 @@ io.on("connection", (socket) => {
     });
   }));
 
-  socket.on("drawing:stroke", socketAction(socket, async (session, stroke) => {
+  socket.on("drawing:mark", socketAction(socket, async (session, mark) => {
     await mutateAndBroadcast(session.code, async (room) => {
-      if (room.phase !== "drawing") throw new Error("Der Zeichenbereich ist aktuell gesperrt.");
-      if (room.game.drawerId !== session.playerId) throw new Error("Nur der Zeichner darf die Leinwand benutzen.");
-      const points = Array.isArray(stroke.points) ? stroke.points.slice(0, 2000) : [];
-      const safePoints = points.map((point) => ({
-        x: Math.max(0, Math.min(1, Number(point.x) || 0)),
-        y: Math.max(0, Math.min(1, Number(point.y) || 0))
-      }));
-      const item = {
-        color: /^#[0-9a-f]{6}$/i.test(stroke.color) ? stroke.color : "#151927",
-        width: Math.max(1, Math.min(12, Number(stroke.width) || 3)),
-        points: safePoints
-      };
-      room.drawing.push(item);
-      room.drawing = room.drawing.slice(-500);
+      game.addDrawingItem(room, session.playerId, mark);
     });
   }));
 
-  socket.on("drawing:clear", socketAction(socket, async (session) => {
+  socket.on("drawing:clear", socketAction(socket, async (session, payload) => {
     await mutateAndBroadcast(session.code, async (room) => {
-      if (room.phase !== "drawing" || room.game.drawerId !== session.playerId) {
-        throw new Error("Nur der Zeichner kann die Leinwand leeren.");
-      }
-      room.drawing = [];
+      game.clearDrawing(room, session.playerId, payload.roundId);
+    });
+  }));
+
+  socket.on("drawing:undo", socketAction(socket, async (session, payload) => {
+    await mutateAndBroadcast(session.code, async (room) => {
+      game.undoDrawing(room, session.playerId, payload.roundId);
     });
   }));
 

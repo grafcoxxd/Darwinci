@@ -8,8 +8,12 @@ const session = {
   room: null,
   color: "#151927",
   width: 4,
+  tool: "pen",
   drawing: false,
   points: [],
+  draftFrom: null,
+  draftTo: null,
+  roundId: null,
   canvas: null,
   context: null,
   tab: "create"
@@ -64,6 +68,14 @@ function connect() {
     });
   });
   session.socket.on("room:state", (state) => {
+    if (session.room?.roundId !== state.roundId) {
+      session.drawing = false;
+      session.points = [];
+      session.draftFrom = null;
+      session.draftTo = null;
+      session.canvas = null;
+      session.context = null;
+    }
     session.room = state;
     $("#entry").classList.add("hidden");
     $("#game").classList.remove("hidden");
@@ -199,13 +211,33 @@ function rolePanel(room) {
 function canvasView(room) {
   const isDrawer = room.drawerId === room.me;
   const drawer = room.players.find((player) => player.id === room.drawerId);
-  const secret = room.word ? `<div class="role-card"><span>GEHEIMES WORT</span><div class="secret-word">${escapeHtml(room.word)}</div>${room.constraint ? `<p>Einschränkung: <strong>${escapeHtml(room.constraint)}</strong></p>` : ""}</div>` : "";
+  const constraint = room.constraint;
+  if (constraint && !constraint.tools.includes(session.tool)) session.tool = constraint.tools[0];
+  const tools = [
+    { id: "pen", icon: "✎", label: "Freihand" },
+    { id: "line", icon: "╱", label: "Linie" },
+    { id: "ellipse", icon: "○", label: "Ellipse" },
+    { id: "rectangle", icon: "□", label: "Rechteck" }
+  ];
+  const usage = room.drawingUsage || {};
+  const toolHtml = isDrawer && constraint ? tools.filter((tool) => constraint.tools.includes(tool.id)).map((tool) => {
+    const limit = constraint.limits?.[tool.id];
+    const remaining = limit === undefined ? null : Math.max(0, limit - (usage[tool.id] || 0));
+    const exhausted = remaining === 0 || (constraint.maxItems && room.drawing.length >= constraint.maxItems);
+    return `<button class="tool-button ${session.tool === tool.id ? "selected" : ""}" data-tool="${tool.id}" ${exhausted ? "disabled" : ""} title="${tool.label}">
+      <b>${tool.icon}</b><span>${tool.label}</span>${remaining === null ? "" : `<small>${remaining} übrig</small>`}
+    </button>`;
+  }).join("") : "";
+  const color = constraint?.fixedColor || session.color;
+  const secret = room.word ? `<div class="role-card"><span>GEHEIMES WORT</span><div class="secret-word">${escapeHtml(room.word)}</div>${constraint ? `<p>Einschränkung: <strong>${escapeHtml(constraint.label)}</strong></p>` : ""}</div>` : "";
   return `<section class="main-stage panel">
     <span class="eyebrow">RUNDE ${room.round}</span>
     <h2>${escapeHtml(drawer?.name || "Jemand")} ${isDrawer ? "– du zeichnest" : "zeichnet jetzt"}</h2>
-    ${isDrawer ? `<div class="canvas-tools"><span class="hint">Werkzeug</span>${["#151927", "#ef4444", "#3b82f6", "#22c55e", "#f59e0b"].map((color) => `<button class="color-swatch ${session.color === color ? "selected" : ""}" data-color="${color}" style="background:${color}" aria-label="Farbe ${color}"></button>`).join("")}
+    ${isDrawer ? `<div class="tool-palette">${toolHtml}</div><div class="canvas-tools"><span class="hint">Farbe & Linie</span>${["#151927", "#ef4444", "#3b82f6", "#22c55e", "#f59e0b"].map((swatch) => `<button class="color-swatch ${color === swatch ? "selected" : ""}" data-color="${swatch}" ${constraint.fixedColor && swatch !== constraint.fixedColor ? "disabled" : ""} style="background:${swatch}" aria-label="Farbe ${swatch}"></button>`).join("")}
       <select id="stroke-width" class="width-select"><option value="2" ${session.width === 2 ? "selected" : ""}>Fein</option><option value="4" ${session.width === 4 ? "selected" : ""}>Mittel</option><option value="8" ${session.width === 8 ? "selected" : ""}>Dick</option></select>
-      <button id="clear-canvas" class="secondary">Löschen</button></div>` : ""}
+      ${constraint.allowUndo === false ? "" : '<button id="undo-canvas" class="secondary" title="Letzte Form rückgängig">↶</button>'}
+      ${constraint.allowClear === false ? "" : '<button id="clear-canvas" class="secondary">Löschen</button>'}</div>
+      <p class="constraint-status" id="constraint-status">${constraint.singleColor ? "Eine Farbe bleibt nach dem ersten Zeichenobjekt festgelegt." : "Werkzeuge und Kontingente werden vom Server geprüft."}</p>` : ""}
     <div class="canvas-wrap"><canvas id="drawing-canvas" class="${isDrawer ? "" : "canvas-disabled"}"></canvas></div>
     ${isDrawer ? '<div class="action-bar"><button id="finish-drawing" class="primary">Zeichnung abgeben <span>→</span></button></div>' : '<p class="hint">Diskutiert im Voice-Chat, was dargestellt werden könnte.</p>'}
   </section>
@@ -311,19 +343,30 @@ function setupCanvas() {
   const context = canvas.getContext("2d");
   session.canvas = canvas;
   session.context = context;
+  session.roundId = session.room.roundId;
+  if (!session.room.constraint?.tools.includes(session.tool)) {
+    session.tool = session.room.constraint?.tools[0] || "pen";
+  }
+  if (session.room.constraint?.fixedColor) session.color = session.room.constraint.fixedColor;
+  else if (session.room.constraint?.singleColor && session.room.drawing.length) session.color = session.room.drawing[0].color;
   resizeCanvas();
   redraw();
   if (session.room.drawerId !== session.room.me) return;
+  $$("[data-tool]").forEach((button) => button.addEventListener("click", () => {
+    session.tool = button.dataset.tool;
+    $$("[data-tool]").forEach((item) => item.classList.toggle("selected", item === button));
+  }));
   $$("[data-color]").forEach((button) => button.addEventListener("click", () => {
     session.color = button.dataset.color;
     $$("[data-color]").forEach((item) => item.classList.toggle("selected", item === button));
   }));
   $("#stroke-width")?.addEventListener("change", (event) => { session.width = Number(event.target.value); });
-  $("#clear-canvas")?.addEventListener("click", () => session.socket.emit("drawing:clear"));
+  $("#clear-canvas")?.addEventListener("click", () => session.socket.emit("drawing:clear", { roundId: session.roundId }));
+  $("#undo-canvas")?.addEventListener("click", () => session.socket.emit("drawing:undo", { roundId: session.roundId }));
   canvas.addEventListener("pointerdown", pointerDown);
   canvas.addEventListener("pointermove", pointerMove);
   canvas.addEventListener("pointerup", pointerUp);
-  canvas.addEventListener("pointercancel", pointerUp);
+  canvas.addEventListener("pointercancel", cancelPointer);
 }
 
 function resizeCanvas() {
@@ -341,30 +384,48 @@ function redraw() {
   session.context.clearRect(0, 0, rect.width, rect.height);
   session.context.fillStyle = "#fff";
   session.context.fillRect(0, 0, rect.width, rect.height);
-  for (const stroke of session.room.drawing || []) drawStroke(stroke, rect);
+  for (const stroke of session.room.drawing || []) drawShape(stroke, rect);
   if (session.drawing && session.points.length) {
-    drawStroke({ color: session.color, width: session.width, points: session.points }, rect);
+    drawShape({ type: session.tool, color: session.color, width: session.width, points: session.points, from: session.draftFrom, to: session.draftTo }, rect);
   }
 }
 
-function drawStroke(stroke, rect) {
-  if (!stroke.points.length) return;
+function drawShape(shape, rect) {
   const context = session.context;
-  context.strokeStyle = stroke.color;
-  context.fillStyle = stroke.color;
-  context.lineWidth = stroke.width;
+  context.strokeStyle = shape.color;
+  context.fillStyle = shape.color;
+  context.lineWidth = shape.width;
   context.lineCap = "round";
   context.lineJoin = "round";
-  const first = stroke.points[0];
-  if (stroke.points.length === 1) {
+  if (shape.type === "pen") {
+    if (!shape.points?.length) return;
+    const first = shape.points[0];
+    if (shape.points.length === 1) {
+      context.beginPath();
+      context.arc(first.x * rect.width, first.y * rect.height, shape.width / 2, 0, Math.PI * 2);
+      context.fill();
+      return;
+    }
     context.beginPath();
-    context.arc(first.x * rect.width, first.y * rect.height, stroke.width / 2, 0, Math.PI * 2);
-    context.fill();
+    context.moveTo(first.x * rect.width, first.y * rect.height);
+    for (const point of shape.points.slice(1)) context.lineTo(point.x * rect.width, point.y * rect.height);
+    context.stroke();
     return;
   }
+  if (!shape.from || !shape.to) return;
+  const x1 = shape.from.x * rect.width;
+  const y1 = shape.from.y * rect.height;
+  const x2 = shape.to.x * rect.width;
+  const y2 = shape.to.y * rect.height;
   context.beginPath();
-  context.moveTo(first.x * rect.width, first.y * rect.height);
-  for (const point of stroke.points.slice(1)) context.lineTo(point.x * rect.width, point.y * rect.height);
+  if (shape.type === "line") {
+    context.moveTo(x1, y1);
+    context.lineTo(x2, y2);
+  } else if (shape.type === "ellipse") {
+    context.ellipse((x1 + x2) / 2, (y1 + y2) / 2, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2, 0, 0, Math.PI * 2);
+  } else if (shape.type === "rectangle") {
+    context.rect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+  }
   context.stroke();
 }
 
@@ -380,23 +441,48 @@ function pointerDown(event) {
   if (session.room.drawerId !== session.room.me || session.room.phase !== "drawing") return;
   session.canvas.setPointerCapture(event.pointerId);
   session.drawing = true;
-  session.points = [pointerPoint(event)];
+  const point = pointerPoint(event);
+  session.points = [point];
+  session.draftFrom = point;
+  session.draftTo = point;
   redraw();
 }
 
 function pointerMove(event) {
   if (!session.drawing) return;
-  session.points.push(pointerPoint(event));
-  if (session.points.length > 1000) session.points.splice(1, 1);
+  const point = pointerPoint(event);
+  session.draftTo = point;
+  if (session.tool === "pen") {
+    session.points.push(point);
+    if (session.points.length > 1000) session.points.splice(1, 1);
+  }
   redraw();
 }
 
 function pointerUp() {
   if (!session.drawing) return;
   session.drawing = false;
-  const points = session.points;
+  const mark = {
+    roundId: session.roundId,
+    type: session.tool,
+    color: session.color,
+    width: session.width,
+    points: session.tool === "pen" ? session.points : undefined,
+    from: session.tool === "pen" ? undefined : session.draftFrom,
+    to: session.tool === "pen" ? undefined : session.draftTo
+  };
   session.points = [];
-  session.socket.emit("drawing:stroke", { color: session.color, width: session.width, points });
+  session.draftFrom = null;
+  session.draftTo = null;
+  session.socket.emit("drawing:mark", mark);
+}
+
+function cancelPointer() {
+  session.drawing = false;
+  session.points = [];
+  session.draftFrom = null;
+  session.draftTo = null;
+  redraw();
 }
 
 $$("[data-tab]").forEach((button) => button.addEventListener("click", () => {

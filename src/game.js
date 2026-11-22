@@ -45,9 +45,24 @@ const DEFAULT_SETTINGS = {
 };
 
 const CONSTRAINTS = {
-  easy: ["Nur eine Farbe", "Nur gerade Linien", "Ohne Buchstaben und Zahlen", "Mit weniger als 12 Formen"],
-  medium: ["Maximal 8 Striche", "Kein Radiergummi", "Nur Kreise und Linien", "Ohne Absetzen (außer einmal)"],
-  hard: ["Nur 5 Striche", "Nur mit der schwachen Hand", "Nur Rechtecke, keine Kurven", "30 Sekunden: dann Stift weg", "Ohne Ansehen der Leinwand"]
+  easy: [
+    { id: "mono-free", label: "Nur eine Farbe – sonst freie Hand", tools: ["pen", "line", "ellipse", "rectangle"], singleColor: true },
+    { id: "eight-lines", label: "Maximal 8 gerade Linien", tools: ["line"], limits: { line: 8 } },
+    { id: "shapes-intro", label: "Nur Linien und Ellipsen, zusammen maximal 10", tools: ["line", "ellipse"], maxItems: 10 },
+    { id: "six-shapes", label: "Maximal 6 Formen", tools: ["pen", "line", "ellipse", "rectangle"], maxItems: 6 }
+  ],
+  medium: [
+    { id: "four-strokes", label: "Maximal 4 freie Striche – danach nicht weiterzeichnen", tools: ["pen"], limits: { pen: 4 } },
+    { id: "no-erase", label: "Freies Zeichnen, aber ohne Löschen oder Rückgängig", tools: ["pen", "line", "ellipse", "rectangle"], allowClear: false, allowUndo: false },
+    { id: "three-line-two-ellipse", label: "Maximal 3 Linien und 2 Ellipsen", tools: ["line", "ellipse"], limits: { line: 3, ellipse: 2 } },
+    { id: "geometric-six", label: "Nur Linien, Rechtecke und Ellipsen – maximal 6 Formen", tools: ["line", "ellipse", "rectangle"], maxItems: 6 }
+  ],
+  hard: [
+    { id: "precision", label: "Maximal 2 Linien und 3 Ellipsen", tools: ["line", "ellipse"], limits: { line: 2, ellipse: 3 } },
+    { id: "two-each", label: "Maximal 2 Ellipsen, 2 Rechtecke und 1 gerade Linie", tools: ["line", "ellipse", "rectangle"], limits: { line: 1, ellipse: 2, rectangle: 2 } },
+    { id: "three-lifts", label: "Der Stift darf nur 3-mal abgesetzt werden – ohne Rückgängig", tools: ["pen"], limits: { pen: 3 }, allowClear: false, allowUndo: false },
+    { id: "black-geometry", label: "Nur schwarze Geometrie: maximal 4 Formen, keine Korrektur", tools: ["line", "ellipse", "rectangle"], maxItems: 4, singleColor: true, fixedColor: "#151927", allowClear: false, allowUndo: false }
+  ]
 };
 
 function createId(length = 22) {
@@ -61,6 +76,16 @@ function createRoomCode() {
 
 function normalizeName(value) {
   return String(value || "").trim().replace(/\s+/g, " ").slice(0, 18);
+}
+
+function compatibleConstraint(constraint, difficulty = "medium") {
+  if (constraint && Array.isArray(constraint.tools)) return constraint;
+  return {
+    id: "legacy-free",
+    label: typeof constraint === "string" ? constraint : "Freies Zeichnen",
+    tools: ["pen", "line", "ellipse", "rectangle"],
+    maxItems: difficulty === "hard" ? 8 : 12
+  };
 }
 
 function sanitizeSettings(input = {}, current = {}) {
@@ -111,6 +136,7 @@ function newRoom(hostName, character) {
       votes: {},
       voteStartedAt: null,
       deadline: null,
+      roundId: null,
       usedWords: [],
       pendingReveal: []
     },
@@ -252,11 +278,12 @@ function startRound(room) {
   const constraint = constraints[crypto.randomInt(constraints.length)];
 
   room.round += 1;
+  room.game.roundId = createId(14);
   room.phase = "drawing";
   room.drawing = [];
   room.game.drawerId = drawer.id;
   room.game.word = word;
-  room.game.constraint = constraint;
+  room.game.constraint = structuredClone(constraint);
   room.game.guess = "";
   room.game.correct = null;
   room.game.votes = {};
@@ -288,6 +315,78 @@ function finishDrawing(room) {
   room.game.deadline = Date.now() + 60_000;
 }
 
+function drawingUsage(room) {
+  return room.drawing.reduce((usage, item) => {
+    usage[item.type] = (usage[item.type] || 0) + 1;
+    return usage;
+  }, {});
+}
+
+function addDrawingItem(room, playerId, input) {
+  if (room.phase !== "drawing") throw new Error("Die Zeichenphase ist beendet.");
+  if (room.game.drawerId !== playerId) throw new Error("Nur der Zeichner darf die Leinwand benutzen.");
+  if (input.roundId !== room.game.roundId) throw new Error("Die Zeichnung gehört zu einer alten Runde.");
+  const constraint = compatibleConstraint(room.game.constraint, room.settings.difficulty);
+  room.game.constraint = constraint;
+  const type = String(input.type || "");
+  if (!constraint.tools.includes(type)) throw new Error(`„${type}“ ist in dieser Runde nicht erlaubt.`);
+  const usage = drawingUsage(room);
+  const limit = constraint.limits?.[type];
+  if (limit !== undefined && (usage[type] || 0) >= limit) {
+    throw new Error("Das Kontingent für dieses Werkzeug ist aufgebraucht.");
+  }
+  if (constraint.maxItems && room.drawing.length >= constraint.maxItems) {
+    throw new Error("Das Formenlimit für diese Runde ist erreicht.");
+  }
+  const color = /^#[0-9a-f]{6}$/i.test(input.color) ? input.color : "#151927";
+  if (constraint.singleColor && room.drawing[0] && color !== room.drawing[0].color) {
+    throw new Error("In dieser Runde ist nur eine Farbe erlaubt.");
+  }
+  if (constraint.fixedColor && color !== constraint.fixedColor) {
+    throw new Error("Diese Runde erfordert die festgelegte Farbe.");
+  }
+  const width = Math.max(1, Math.min(12, Number(input.width) || 3));
+  const clampPoint = (point) => ({
+    x: Math.max(0, Math.min(1, Number(point?.x) || 0)),
+    y: Math.max(0, Math.min(1, Number(point?.y) || 0))
+  });
+  const item = { type, color, width, roundId: room.game.roundId };
+  if (type === "pen") {
+    const points = Array.isArray(input.points) ? input.points.slice(0, 2000).map(clampPoint) : [];
+    if (!points.length) throw new Error("Der Strich enthält keine Punkte.");
+    item.points = points;
+  } else {
+    item.from = clampPoint(input.from);
+    item.to = clampPoint(input.to);
+    if (item.from.x === item.to.x && item.from.y === item.to.y) {
+      throw new Error("Ziehe die Form etwas größer.");
+    }
+  }
+  room.drawing.push(item);
+}
+
+function clearDrawing(room, playerId, roundId) {
+  if (room.phase !== "drawing" || room.game.drawerId !== playerId) {
+    throw new Error("Nur der Zeichner kann während der Zeichenphase löschen.");
+  }
+  if (roundId !== room.game.roundId) throw new Error("Diese Leinwand gehört zu einer alten Runde.");
+  if (compatibleConstraint(room.game.constraint, room.settings.difficulty).allowClear === false) {
+    throw new Error("Löschen ist in dieser Runde verboten.");
+  }
+  room.drawing = [];
+}
+
+function undoDrawing(room, playerId, roundId) {
+  if (room.phase !== "drawing" || room.game.drawerId !== playerId) {
+    throw new Error("Nur der Zeichner kann während der Zeichenphase rückgängig machen.");
+  }
+  if (roundId !== room.game.roundId) throw new Error("Diese Aktion gehört zu einer alten Runde.");
+  if (compatibleConstraint(room.game.constraint, room.settings.difficulty).allowUndo === false) {
+    throw new Error("Rückgängig ist in dieser Runde verboten.");
+  }
+  room.drawing.pop();
+}
+
 function castVote(room, playerId, targetId) {
   if (room.phase !== "voting") throw new Error("Aktuell findet keine Abstimmung statt.");
   const voter = room.players.find((player) => player.id === playerId && player.alive && !player.sittingOut);
@@ -316,6 +415,7 @@ function resolveVoting(room) {
 
   const reveal = {
     round: room.round,
+    roundId: room.game.roundId,
     guess: room.game.guess,
     word: room.game.word,
     correct: room.game.correct,
@@ -379,7 +479,7 @@ function resetToLobby(room) {
   room.drawing = [];
   room.game = {
     drawerId: null, word: null, constraint: null, guess: "", correct: null,
-    votes: {}, voteStartedAt: null, deadline: null, usedWords: [], pendingReveal: []
+    votes: {}, voteStartedAt: null, deadline: null, roundId: null, usedWords: [], pendingReveal: []
   };
   room.players.forEach((player) => {
     player.role = null;
@@ -396,6 +496,7 @@ function publicState(room, viewerId) {
   const showResultWord = room.phase === "gameover" ||
     (room.phase === "result" && room.game.lastResult?.revealWord);
   const scoreHidden = room.settings.revealTiming === "end" && room.phase !== "gameover";
+  const constraint = compatibleConstraint(room.game.constraint, room.settings.difficulty);
   const targetScore = room.phase === "lobby"
     ? room.settings.targetScore
     : room.settings.targetScore;
@@ -404,6 +505,7 @@ function publicState(room, viewerId) {
     hostId: room.hostId,
     phase: room.phase,
     round: room.round,
+    roundId: room.game.roundId,
     score: scoreHidden ? null : room.score,
     targetScore,
     settings: { ...room.settings, targetScore },
@@ -421,7 +523,8 @@ function publicState(room, viewerId) {
     me: viewerId,
     myRole: viewer.role,
     drawerId: room.game.drawerId,
-    constraint: viewerId === room.game.drawerId ? room.game.constraint : null,
+    constraint: viewerId === room.game.drawerId && room.phase === "drawing" ? constraint : null,
+    drawingUsage: drawingUsage(room),
     word: showWord ? room.game.word : null,
     guess: room.game.guess,
     deadline: room.game.deadline,
@@ -430,7 +533,7 @@ function publicState(room, viewerId) {
     hasVoted: Boolean(room.game.votes[viewerId]),
     votesCast: Object.keys(room.game.votes).length,
     activeVoters: room.players.filter((p) => p.alive && !p.sittingOut).length,
-    drawing: room.drawing,
+    drawing: room.drawing.map((item) => ({ type: "pen", ...item })),
     lastResult: room.game.lastResult ? {
       round: room.game.lastResult.round,
       guess: room.game.lastResult.guess,
@@ -455,6 +558,7 @@ function publicState(room, viewerId) {
 }
 
 module.exports = {
-  addPlayer, advanceTimers, castVote, CHARACTERS, finishDrawing, leaveRoom, newRoom,
-  publicState, resetToLobby, resolveVoting, sanitizeSettings, startGame, submitGuess
+  addDrawingItem, addPlayer, advanceTimers, castVote, CHARACTERS, clearDrawing,
+  finishDrawing, leaveRoom, newRoom, publicState, resetToLobby, resolveVoting,
+  sanitizeSettings, startGame, startRound, submitGuess, undoDrawing
 };
