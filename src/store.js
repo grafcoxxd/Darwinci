@@ -24,12 +24,6 @@ async function initStore() {
     )
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS game_rooms_updated_idx ON game_rooms(updated_at)");
-  await pool.end();
-  pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.PGSSL_DISABLE === "true" ? false : { rejectUnauthorized: false },
-    max: 5
-  });
 }
 
 async function getRoom(code) {

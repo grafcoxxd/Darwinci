@@ -242,23 +242,27 @@ io.on("connection", (socket) => {
   });
 });
 
-setInterval(async () => {
+const timer = setInterval(async () => {
   if (tickingRooms.size) return;
-  for (const room of await store.listRooms()) {
-    if (!["drawing", "guessing", "voting", "result"].includes(room.phase)) continue;
-    tickingRooms.add(room.code);
-    try {
-      const updated = await mutateAndBroadcast(room.code, async (current) => {
-        game.advanceTimers(current);
-      });
-      if (updated.phase === "lobby") tickingRooms.delete(room.code);
-    } catch (error) {
-      console.error(`Timerfehler in ${room.code}:`, error.message);
-    } finally {
-      tickingRooms.delete(room.code);
+  try {
+    for (const room of await store.listRooms()) {
+      if (!["drawing", "guessing", "voting", "result"].includes(room.phase)) continue;
+      tickingRooms.add(room.code);
+      try {
+        await mutateAndBroadcast(room.code, async (current) => {
+          game.advanceTimers(current);
+        });
+      } catch (error) {
+        console.error(`Timerfehler in ${room.code}:`, error.message);
+      } finally {
+        tickingRooms.delete(room.code);
+      }
     }
+  } catch (error) {
+    console.error("Datenbankfehler im Spiel-Timer:", error.message);
   }
-}, 1000).unref();
+}, 1000);
+timer.unref();
 
 const port = Number(process.env.PORT) || 3000;
 store.initStore()
@@ -269,6 +273,7 @@ store.initStore()
   });
 
 async function shutdown() {
+  clearInterval(timer);
   server.close();
   await store.closeStore();
   process.exit(0);
