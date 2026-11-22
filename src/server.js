@@ -137,7 +137,7 @@ io.on("connection", (socket) => {
     await mutateAndBroadcast(session.code, async (room) => {
       requireHost(room, session.playerId);
       if (room.phase !== "lobby") throw new Error("Einstellungen können nur in der Lobby geändert werden.");
-      room.settings = game.sanitizeSettings(settings);
+      room.settings = game.sanitizeSettings(settings, room.settings);
     });
   }));
 
@@ -148,6 +148,16 @@ io.on("connection", (socket) => {
       player.character = game.CHARACTERS.some((item) => item.id === profile.character)
         ? profile.character : player.character;
     });
+  }));
+
+  socket.on("lobby:leave", socketAction(socket, async (session) => {
+    const room = await store.withRoom(session.code, async (state) => {
+      game.leaveRoom(state, session.playerId);
+    });
+    activeSockets.delete(socket.id);
+    broadcastRoom(room);
+    socket.emit("lobby:left", { code: room.code });
+    socket.leave(room.code);
   }));
 
   socket.on("game:start", socketAction(socket, async (session) => {

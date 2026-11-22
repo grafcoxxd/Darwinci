@@ -71,6 +71,7 @@ function connect() {
   });
   session.socket.on("error:message", toast);
   session.socket.on("session:invalid", leaveSession);
+  session.socket.on("lobby:left", () => leaveSession());
   session.socket.io.on("reconnect_attempt", () => toast("Verbindung unterbrochen – versuche wieder beizutreten…"));
 }
 
@@ -153,8 +154,8 @@ function renderSettings(room) {
     <label class="setting-row custom-words ${["custom", "mix"].includes(s.wordPack) ? "" : "hidden"}">Eigene Wörter<textarea name="customWords" rows="4" placeholder="Ein Begriff pro Zeile oder mit Kommas getrennt" ${!isHost ? "disabled" : ""}>${escapeHtml(s.customWords)}</textarea></label>
     <label class="setting-row">Auflösung<select name="revealTiming" ${!isHost ? "disabled" : ""}><option value="immediate" ${s.revealTiming === "immediate" ? "selected" : ""}>Nach jeder Abstimmung</option><option value="end" ${s.revealTiming === "end" ? "selected" : ""}>Erst am Spielende</option></select></label>
     <label class="setting-row">Ausscheiden<select name="eliminationMode" ${!isHost ? "disabled" : ""}><option value="classic" ${s.eliminationMode === "classic" ? "selected" : ""}>Bis zum Ende raus</option><option value="sitout" ${s.eliminationMode === "sitout" ? "selected" : ""}>Nur nächste Runde aussetzen</option></select></label>
-    <label class="setting-row">Siegbedingung<select name="winMode" ${!isHost ? "disabled" : ""}><option value="roles" ${s.winMode === "roles" ? "selected" : ""}>Alle Saboteure enttarnen</option><option value="score" ${s.winMode === "score" ? "selected" : ""}>Zielpunktzahl</option><option value="rounds" ${s.winMode === "rounds" ? "selected" : ""}>Rundenmaximum</option></select></label>
-    <label class="setting-row ${s.winMode === "score" ? "" : "hidden"}">Zielpunktzahl<input type="number" min="1" max="20" name="targetScore" value="${s.targetScore}" ${!isHost ? "disabled" : ""}></label>
+    <label class="setting-row score-target">Benötigte Punkte<input type="number" name="targetScore" min="1" max="20" value="${room.targetScore}" ${!isHost ? "disabled" : ""}><small>Empfehlung für ${room.players.length} Spieler: ${room.recommendedTargetScore} Punkte. 1 richtiges Wort = 1 Punkt.</small></label>
+    <label class="setting-row">Siegbedingung<select name="winMode" ${!isHost ? "disabled" : ""}><option value="score" ${s.winMode !== "rounds" ? "selected" : ""}>Punktsieg oder Enttarnung</option><option value="rounds" ${s.winMode === "rounds" ? "selected" : ""}>Zusätzlich mit Rundenmaximum</option></select></label>
     <label class="setting-row ${s.winMode === "rounds" ? "" : "hidden"}">Maximale Runden<input type="number" min="1" max="30" name="maxRounds" value="${s.maxRounds}" ${!isHost ? "disabled" : ""}></label>
   </form>`;
 }
@@ -175,6 +176,7 @@ function lobbyView(room) {
         </div>
         <p class="${room.players.length >= 4 ? "success-text" : "danger-text"}">${warnings}</p>
         ${isHost ? '<button id="start-game" class="primary">Spiel starten <span>→</span></button>' : '<p class="hint">Der Host startet das Spiel.</p>'}
+        <button id="leave-lobby" class="secondary leave-lobby" type="button">Lobby verlassen</button>
       </div>
     </section>
     <aside class="sidebar panel"><h3>Lobby-Regeln</h3>${renderSettings(room)}
@@ -207,7 +209,7 @@ function canvasView(room) {
     ${isDrawer ? '<div class="action-bar"><button id="finish-drawing" class="primary">Zeichnung abgeben <span>→</span></button></div>' : '<p class="hint">Diskutiert im Voice-Chat, was dargestellt werden könnte.</p>'}
   </section>
   <aside class="sidebar panel"><h3>Deine Information</h3>${rolePanel(room)}${secret}
-    <p class="hint">Punktestand: <strong>${room.score}</strong> richtige Wörter</p>
+    <p class="hint">Punktestand: <strong>${room.score === null ? "verdeckst" : `${room.score} / ${room.targetScore}`}</strong>${room.score === null ? "" : " richtige Wörter"}</p>
   </aside>`;
 }
 
@@ -254,7 +256,7 @@ function gameoverView(room) {
   return `<section class="main-stage panel"><div class="result">
     <div class="big-icon">${goodWon ? "🏆" : "🕶️"}</div><span class="eyebrow">SPIEL BEENDET</span>
     <h2>${goodWon ? "Die Guten haben gewonnen!" : "Die Saboteure gewinnen!"}</h2>
-    <p class="result-copy">Nach ${room.round} Runden und ${room.score} richtigen Wörtern stehen die geheimen Rollen fest.</p>
+    <p class="result-copy">Nach ${room.round} Runden und ${room.score} von ${room.targetScore} richtigen Wörtern stehen die geheimen Rollen fest.</p>
     <div class="reveal-list">${room.pendingReveal.map(item => `<div class="reveal-row"><span>Runde ${item.round}: <strong>${escapeHtml(item.word)}</strong></span><span class="${item.correct ? "success-text" : "danger-text"}">${item.correct ? "✓ richtig" : `✕ ${escapeHtml(item.guess)}`}</span></div>`).join("")}</div>
     ${room.hostId === room.me ? '<button id="reset-game" class="primary">Zurück in die Lobby <span>→</span></button>' : '<p class="hint">Der Host öffnet gleich die Lobby.</p>'}
   </div></section><aside class="sidebar panel"><h3>Rollen enthüllt</h3>${renderPlayerList(room)}</aside>`;
@@ -283,12 +285,12 @@ function renderGame() {
 function bindGameControls() {
   const room = session.room;
   $("#start-game")?.addEventListener("click", () => session.socket.emit("game:start"));
+  $("#leave-lobby")?.addEventListener("click", () => {
+    session.socket.emit("lobby:leave");
+  });
   $("#settings-form")?.addEventListener("change", (event) => {
     const data = Object.fromEntries(new FormData(event.currentTarget));
     session.socket.emit("lobby:update-settings", data);
-    if (data.eliminationMode === "sitout" && data.winMode === "roles") {
-      toast("Beim Aussetzen-Modus bitte Punkte- oder Rundenziel als Siegbedingung wählen.");
-    }
   });
   $("#next-round")?.addEventListener("click", () => session.socket.emit("game:next"));
   $("#reset-game")?.addEventListener("click", () => session.socket.emit("game:reset"));

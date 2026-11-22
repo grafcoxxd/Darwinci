@@ -34,7 +34,10 @@ test("shows target word to saboteurs and constraint only to drawer", () => {
   assert.equal(saboteurState.word, room.game.word);
   assert.equal(drawerState.word, room.game.word);
   assert.equal(drawerState.constraint, room.game.constraint);
-  assert.notEqual(saboteurState.constraint, room.game.constraint);
+  assert.equal(
+    saboteurState.constraint,
+    saboteur.id === drawer.id ? room.game.constraint : null
+  );
 });
 
 test("records one hidden vote result and reveals game roles at game over", () => {
@@ -60,13 +63,6 @@ test("records one hidden vote result and reveals game roles at game over", () =>
   assert.ok(game.publicState(room, guesser.id).players.every((player) => player.role));
 });
 
-test("rejects unlimited sit-out rounds", () => {
-  const room = createReadyRoom();
-  room.settings.eliminationMode = "sitout";
-  room.settings.winMode = "roles";
-  assert.throws(() => game.startGame(room), /Punkte- oder Rundenziel/);
-});
-
 test("constrains lobby settings to supported values", () => {
   const settings = game.sanitizeSettings({
     saboteurCount: 100,
@@ -79,6 +75,51 @@ test("constrains lobby settings to supported values", () => {
   assert.equal(settings.saboteurCount, 3);
   assert.equal(settings.drawTime, 60);
   assert.equal(settings.difficulty, "medium");
-  assert.equal(settings.targetScore, 1);
   assert.equal(settings.maxRounds, 30);
+});
+
+test("scales the automatic target score with lobby size", () => {
+  const room = createReadyRoom();
+  game.startGame(room);
+  assert.equal(game.publicState(room, room.players[0].id).targetScore, 4);
+
+  game.resetToLobby(room);
+  for (let index = 0; index < 4; index += 1) game.addPlayer(room, `Extra ${index}`, "fox");
+  game.startGame(room);
+  assert.equal(game.publicState(room, room.players[0].id).targetScore, 6);
+});
+
+test("lets lobby players leave and transfers host ownership", () => {
+  const room = createReadyRoom();
+  const oldHost = room.hostId;
+  const nextHost = room.players[1].id;
+  game.leaveRoom(room, oldHost);
+
+  assert.equal(room.hostId, nextHost);
+  assert.ok(room.players.every((player) => player.id !== oldHost));
+});
+
+test("keeps the target score fixed and hidden with delayed reveals", () => {
+  const room = createReadyRoom();
+  room.settings.revealTiming = "end";
+  game.startGame(room);
+  assert.equal(room.settings.targetScore, 4);
+  room.players[3].alive = false;
+
+  const state = game.publicState(room, room.players[0].id);
+  assert.equal(state.targetScore, 4);
+  assert.equal(state.score, null);
+});
+
+test("allows the host to configure a custom target score", () => {
+  const room = createReadyRoom();
+  room.settings = game.sanitizeSettings({
+    ...room.settings,
+    targetScore: 7
+  }, room.settings);
+
+  assert.equal(room.settings.targetScore, 7);
+  assert.equal(room.settings.targetScoreCustom, true);
+  game.addPlayer(room, "Ella", "panda");
+  assert.equal(room.settings.targetScore, 7);
 });

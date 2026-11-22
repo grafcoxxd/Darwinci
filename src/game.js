@@ -38,8 +38,9 @@ const DEFAULT_SETTINGS = {
   wordPack: "begriffe",
   customWords: "",
   eliminationMode: "classic",
-  winMode: "roles",
-  targetScore: 5,
+  winMode: "score",
+  targetScore: 4,
+  targetScoreCustom: false,
   maxRounds: 8
 };
 
@@ -62,7 +63,7 @@ function normalizeName(value) {
   return String(value || "").trim().replace(/\s+/g, " ").slice(0, 18);
 }
 
-function sanitizeSettings(input = {}) {
+function sanitizeSettings(input = {}, current = {}) {
   const settings = { ...DEFAULT_SETTINGS };
   settings.saboteurCount = clampInt(input.saboteurCount, 1, 3, 1);
   settings.drawTime = [30, 45, 60, 90, 120].includes(Number(input.drawTime)) ? Number(input.drawTime) : 60;
@@ -76,8 +77,10 @@ function sanitizeSettings(input = {}) {
     .slice(0, 100)
     .join("\n");
   settings.eliminationMode = ["classic", "sitout"].includes(input.eliminationMode) ? input.eliminationMode : "classic";
-  settings.winMode = ["roles", "rounds", "score"].includes(input.winMode) ? input.winMode : "roles";
-  settings.targetScore = clampInt(input.targetScore, 1, 20, 5);
+  settings.winMode = input.winMode === "rounds" ? "rounds" : "score";
+  settings.targetScore = clampInt(input.targetScore, 1, 20, current.targetScore ?? 4);
+  settings.targetScoreCustom = Boolean(current.targetScoreCustom) ||
+    Number(input.targetScore) !== Number(current.targetScore ?? settings.targetScore);
   settings.maxRounds = clampInt(input.maxRounds, 1, 30, 8);
   return settings;
 }
@@ -140,7 +143,22 @@ function addPlayer(room, name, character) {
   }
   const id = createId();
   room.players.push(newPlayer(id, cleanName, character));
+  if (!room.hostId) room.hostId = id;
+  if (!room.settings.targetScoreCustom) room.settings.targetScore = targetScoreFor(room.players.length);
   return id;
+}
+
+function leaveRoom(room, playerId) {
+  if (room.phase !== "lobby") throw new Error("Während eines laufenden Spiels ist ein Verlassen nicht möglich.");
+  const index = room.players.findIndex((player) => player.id === playerId);
+  if (index === -1) throw new Error("Spieler wurde in der Lobby nicht gefunden.");
+  room.players.splice(index, 1);
+  if (room.hostId === playerId) room.hostId = room.players[0]?.id || null;
+  if (!room.settings.targetScoreCustom) room.settings.targetScore = targetScoreFor(room.players.length);
+}
+
+function targetScoreFor(playerCount) {
+  return Math.max(4, Math.ceil(Math.max(0, playerCount) / 2) + 2);
 }
 
 function getWords(settings) {
@@ -162,9 +180,6 @@ function startGame(room) {
   if (room.settings.saboteurCount > maxSaboteurs) {
     throw new Error(`Mit ${room.players.length} Spielern sind maximal ${maxSaboteurs} Saboteure sinnvoll.`);
   }
-  if (room.settings.eliminationMode === "sitout" && room.settings.winMode === "roles") {
-    throw new Error("Beim Aussetzen-Modus bitte Punkte- oder Rundenziel als Siegbedingung wählen.");
-  }
   const words = getWords(room.settings);
   if (!words.length) throw new Error("Das gewählte Wortpaket enthält keine Wörter.");
 
@@ -181,6 +196,7 @@ function startGame(room) {
   shuffled.slice(0, room.settings.saboteurCount).forEach((player) => { player.role = "saboteur"; });
   room.round = 0;
   room.score = 0;
+  if (!room.settings.targetScoreCustom) room.settings.targetScore = targetScoreFor(room.players.length);
   room.game.usedWords = [];
   room.game.pendingReveal = [];
   startRound(room);
@@ -292,7 +308,7 @@ function determineWinner(room) {
   const saboteurCount = room.players.filter((p) => p.alive && p.role === "saboteur").length;
   if (saboteurCount === 0) return "good";
   if (saboteurCount >= goodCount) return "saboteur";
-  if (room.settings.winMode === "score" && room.score >= room.settings.targetScore) return "good";
+  if (room.score >= room.settings.targetScore) return "good";
   if (room.settings.winMode === "rounds" && room.round >= room.settings.maxRounds) {
     return room.score >= Math.ceil(room.round / 2) ? "good" : "saboteur";
   }
@@ -343,13 +359,19 @@ function publicState(room, viewerId) {
     (viewer.role === "saboteur" || viewerId === room.game.drawerId);
   const showResultWord = room.phase === "gameover" ||
     (room.phase === "result" && room.game.lastResult?.revealWord);
+  const scoreHidden = room.settings.revealTiming === "end" && room.phase !== "gameover";
+  const targetScore = room.phase === "lobby"
+    ? room.settings.targetScore
+    : room.settings.targetScore;
   return {
     code: room.code,
     hostId: room.hostId,
     phase: room.phase,
     round: room.round,
-    score: room.score,
-    settings: room.settings,
+    score: scoreHidden ? null : room.score,
+    targetScore,
+    settings: { ...room.settings, targetScore },
+    recommendedTargetScore: targetScoreFor(room.players.length),
     players: room.players.map((player) => ({
       id: player.id,
       name: player.name,
@@ -395,6 +417,6 @@ function publicState(room, viewerId) {
 }
 
 module.exports = {
-  addPlayer, advanceTimers, castVote, CHARACTERS, finishDrawing, newRoom,
+  addPlayer, advanceTimers, castVote, CHARACTERS, finishDrawing, leaveRoom, newRoom,
   publicState, resetToLobby, resolveVoting, sanitizeSettings, startGame, submitGuess
 };
