@@ -417,17 +417,6 @@ function drawShape(shape, rect) {
       context.fill();
       return;
     }
-
-    function mirrorPreview(shape) {
-      if (!session.room.constraint?.mirrorX) return shape;
-      const mirrorPoint = (point) => point && ({ ...point, x: 1 - point.x });
-      return {
-        ...shape,
-        points: shape.points?.map(mirrorPoint),
-        from: mirrorPoint(shape.from),
-        to: mirrorPoint(shape.to)
-      };
-    }
     context.beginPath();
     context.moveTo(first.x * rect.width, first.y * rect.height);
     for (const point of shape.points.slice(1)) context.lineTo(point.x * rect.width, point.y * rect.height);
@@ -449,6 +438,17 @@ function drawShape(shape, rect) {
     context.rect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
   }
   context.stroke();
+}
+
+function mirrorPreview(shape) {
+  if (!session.room.constraint?.mirrorX) return shape;
+  const mirrorPoint = (point) => point && ({ ...point, x: 1 - point.x });
+  return {
+    ...shape,
+    points: shape.points?.map(mirrorPoint),
+    from: mirrorPoint(shape.from),
+    to: mirrorPoint(shape.to)
+  };
 }
 
 function pointerPoint(event) {
