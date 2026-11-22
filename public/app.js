@@ -557,7 +557,7 @@ function pointerPoint(event) {
 }
 
 function pointerDown(event) {
-  if (session.room.drawerId !== session.room.me || session.room.phase !== "drawing") return;
+  if (!canDrawCurrentTool()) return;
   session.canvas.setPointerCapture(event.pointerId);
   session.drawing = true;
   startBlindFade();
@@ -576,8 +576,19 @@ function pointerMove(event) {
   if (session.tool === "pen") {
     appendPenPoint(session.points, point);
   }
+
   emitDrawingPreview();
   redraw();
+}
+
+function canDrawCurrentTool() {
+  if (!session.room || session.room.drawerId !== session.playerId || session.room.phase !== "drawing") return false;
+  const constraint = session.room.constraint;
+  if (!constraint?.tools.includes(session.tool)) return false;
+  if (constraint.maxItems && session.room.drawing.length >= constraint.maxItems) return false;
+  const limit = constraint.limits?.[session.tool];
+  if (limit !== undefined && (session.room.drawingUsage?.[session.tool] || 0) >= limit) return false;
+  return true;
 }
 
 function appendPenPoint(points, point) {
@@ -657,9 +668,9 @@ function runBlindFade() {
       return;
     }
     const elapsed = performance.now() - session.blindFadeStartedAt;
-    const opacity = elapsed <= 3000
+    const opacity = elapsed <= 1000
       ? 1
-      : Math.max(0, 1 - (elapsed - 3000) / 3000);
+      : Math.max(0, 1 - (elapsed - 1000) / 3000);
     session.canvas.style.opacity = String(opacity);
     if (opacity > 0) session.blindFadeFrame = requestAnimationFrame(tick);
   };
