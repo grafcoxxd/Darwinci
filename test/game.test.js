@@ -229,9 +229,12 @@ test("never assigns multi-lift stroke restrictions", () => {
 test("records one hidden vote result and reveals game roles at game over", () => {
   const room = createReadyRoom();
   game.startGame(room);
-  const guesser = room.players.find((player) => player.id !== room.game.drawerId && player.role === "good");
-  game.finishDrawing(room);
-  game.submitGuess(room, guesser.id, room.game.word);
+  while (room.phase === "drawing") {
+    game.finishDrawing(room);
+    const guesser = room.players.find((player) => player.id !== room.game.drawerId);
+    game.submitGuess(room, guesser.id, room.game.word);
+  }
+  assert.equal(room.phase, "voting");
 
   const saboteur = room.players.find((player) => player.role === "saboteur");
   for (const voter of room.players) {
@@ -246,7 +249,95 @@ test("records one hidden vote result and reveals game roles at game over", () =>
   assert.equal(room.game.lastResult.ejectedId, saboteur.id);
   assert.equal(room.phase, "gameover");
   assert.equal(room.game.lastResult.winner, "good");
-  assert.ok(game.publicState(room, guesser.id).players.every((player) => player.role));
+  assert.ok(game.publicState(room, room.players[0].id).players.every((player) => player.role));
+  assert.equal(room.game.lastResult.cycleResults.length, 4);
+});
+
+test("waits for every active player to finish a drawing before voting", () => {
+  const room = createReadyRoom();
+  game.startGame(room);
+  const drawings = new Set();
+  while (room.phase === "drawing") {
+    drawings.add(room.game.drawerId);
+    game.finishDrawing(room);
+    const guesser = room.players.find((player) => player.id !== room.game.drawerId);
+    game.submitGuess(room, guesser.id, "falsch");
+    if (room.phase === "voting") break;
+    assert.equal(room.phase, "drawing");
+  }
+
+  assert.equal(drawings.size, 4);
+  assert.equal(room.game.cycleResults.length, 4);
+  assert.equal(room.phase, "voting");
+});
+
+test("agent ability remains consumed during the next draw and renews after voting", () => {
+  const room = createReadyRoom();
+  game.startGame(room);
+  const agent = room.players.find((player) => player.role === "saboteur");
+  agent.ability = "heavy-ink";
+  game.useAgentAbility(room, agent.id);
+  const previousAbility = agent.ability;
+  assert.equal(agent.abilityUsed, true);
+
+  game.finishDrawing(room);
+  const guesser = room.players.find((player) => player.id !== room.game.drawerId);
+  game.submitGuess(room, guesser.id, room.game.word);
+  assert.equal(agent.ability, previousAbility);
+  assert.equal(agent.abilityUsed, true);
+  assert.equal(room.game.abilityEffects.length, 0);
+
+  while (room.phase === "drawing") {
+    game.finishDrawing(room);
+    game.submitGuess(
+      room,
+      room.players.find((player) => player.id !== room.game.drawerId).id,
+      "falsch"
+    );
+  }
+  const voters = room.players;
+  game.castVote(room, voters[0].id, voters[1].id);
+  game.castVote(room, voters[1].id, voters[0].id);
+  game.castVote(room, voters[2].id, voters[3].id);
+  game.castVote(room, voters[3].id, voters[2].id);
+  game.resolveVoting(room);
+  if (room.phase === "result") game.startRound(room);
+  assert.equal(agent.abilityUsed, false);
+  assert.notEqual(agent.ability, previousAbility);
+});
+
+test("freeze blocks only one second out of every five", () => {
+  const room = createReadyRoom();
+  game.startGame(room);
+  room.game.abilityEffects = [{
+    id: "freeze",
+    startedAt: 10_000,
+    expiresAt: 25_000
+  }];
+  const state = {
+    phase: "drawing",
+    drawerId: room.game.drawerId,
+    roundId: room.game.roundId,
+    constraint: room.game.constraint,
+    difficulty: room.settings.difficulty,
+    abilityEffects: room.game.abilityEffects
+  };
+
+  const originalNow = Date.now;
+  try {
+    Date.now = () => 10_500;
+    assert.throws(() => game.createDrawingPreview(state, state.drawerId, {
+      roundId: state.roundId, type: state.constraint.tools[0], width: 4, color: "#151927",
+      points: [{ x: 0.1, y: 0.1 }], from: { x: 0.1, y: 0.1 }, to: { x: 0.5, y: 0.5 }
+    }), /blockiert/);
+    Date.now = () => 11_500;
+    assert.doesNotThrow(() => game.createDrawingPreview(state, state.drawerId, {
+      roundId: state.roundId, type: state.constraint.tools[0], width: 4, color: "#151927",
+      points: [{ x: 0.1, y: 0.1 }], from: { x: 0.1, y: 0.1 }, to: { x: 0.5, y: 0.5 }
+    }));
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test("constrains lobby settings to supported values", () => {

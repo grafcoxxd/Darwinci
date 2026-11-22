@@ -294,7 +294,8 @@ function canvasView(room) {
   const secret = room.word ? `<div class="role-card secret-card"><span class="eyebrow">${isDrawer ? "GEHEIMES WORT" : "DEIN WISSEN"}</span><div class="secret-word">${escapeHtml(room.word)}</div>${isDrawer ? `<div class="handicap-list">${handicaps.map((item) => `<div class="handicap-item ${item.status || ""} ${item.black ? "black" : ""}"><span class="handicap-icon">${item.icon}</span><strong>${item.value}</strong><small>${item.text}</small></div>`).join("")}</div>` : ""}</div>` : "";
   return `<section class="main-stage canvas-stage panel">
     <div class="canvas-wrap"><canvas id="drawing-canvas" class="${isDrawer ? "" : "canvas-disabled"}"></canvas>
-      <div class="canvas-caption"><span class="eyebrow">RUNDE ${room.round}</span><strong>${isDrawer ? "Du zeichnest" : `${escapeHtml(drawer?.name || "Jemand")} zeichnet`}</strong></div>
+    <div class="canvas-fog ${room.activeAbilityEffects?.some((effect) => effect.id === "fog") && isDrawer ? "active" : ""}"></div>
+      <div class="canvas-caption"><span class="eyebrow">RUNDE ${room.round} · ZUG ${room.cycleProgress.current}/${room.cycleProgress.total}</span><strong>${isDrawer ? "Du zeichnest" : `${escapeHtml(drawer?.name || "Jemand")} zeichnet`}</strong></div>
       ${isDrawer ? `<div class="canvas-colors">${["#151927", "#ef4444", "#3b82f6", "#22c55e", "#f59e0b"].map((swatch) => `<button class="color-swatch ${color === swatch ? "selected" : ""}" data-color="${swatch}" ${constraint.fixedColor && swatch !== constraint.fixedColor ? "disabled" : ""} style="background:${swatch}" aria-label="Farbe ${swatch}"></button>`).join("")}</div>
       <div class="canvas-corrections">
         ${constraint.allowUndo === false ? "" : '<button id="undo-canvas" class="canvas-control" title="Letzte Form rückgängig" aria-label="Rückgängig">↶</button>'}
@@ -322,7 +323,8 @@ function guessingView(room) {
 function votingView(room) {
   const eligible = room.players.filter((p) => p.alive && !p.sittingOut && p.id !== room.me);
   return `<section class="main-stage decision-stage panel"><div class="vote-stage">
-    <span class="eyebrow">EURE EINGELOGGTE LÖSUNG</span><div class="locked-guess">„${escapeHtml(room.guess)}“</div>
+    <span class="eyebrow">LÖSUNGEN DIESER RUNDENFOLGE</span>
+    <div class="cycle-guesses">${room.cycleProgress.results.map((result, index) => `<span><small>Zug ${index + 1}</small><strong>${escapeHtml(result.guess)}</strong></span>`).join("")}</div>
     <h2>Wen haltet ihr für verdächtig?</h2><p class="result-copy">Wählt eine Person. Eure Stimmen bleiben bis zur Auswertung verdeckt.</p>
     <div class="vote-grid">${eligible.map((player) => `<button class="vote-player" data-vote="${player.id}" ${room.hasVoted ? "disabled" : ""}>
       <div class="avatar" style="background:${player.character.color}24">${player.character.icon}</div><div><strong>${escapeHtml(player.name)}</strong><span>Als Agent verdächtigen</span></div></button>`).join("")}</div>
@@ -342,6 +344,7 @@ function resultView(room) {
       <div class="result-card"><span>Das Wort war</span><strong>${result.word ? escapeHtml(result.word) : "noch geheim"}</strong></div>
       <div class="result-card"><span>Ergebnis</span><strong class="${result.correct === null ? "" : result.correct ? "success-text" : "danger-text"}">${result.correct === null ? "Verdeckt" : result.correct ? "Richtig ✓" : "Falsch ✕"}</strong></div>
     </div>
+    ${result.cycleResults?.length ? `<div class="cycle-results">${result.cycleResults.map((item, index) => `<div><span>Zug ${index + 1}</span><strong>${escapeHtml(item.guess)}</strong><b class="${item.correct ? "success-text" : "danger-text"}">${item.correct ? "✓" : "×"}</b></div>`).join("")}</div>` : ""}
     ${room.hostId === room.me ? '<button id="next-round" class="primary">Nächste Runde <span>→</span></button>' : '<p class="hint">Der Host startet die nächste Runde.</p>'}
   </div></section><aside class="sidebar panel"><h3>Deine Information</h3>${rolePanel(room)}<p class="hint">Gesamtpunktzahl: <strong>${room.score}</strong></p></aside>`;
 }
@@ -578,6 +581,10 @@ function pointerDown(event) {
 
 function pointerMove(event) {
   if (!session.drawing) return;
+  if (isFreezeActive()) {
+    pointerUp();
+    return;
+  }
   const point = pointerPoint(event);
   session.draftTo = point;
   if (session.tool === "pen") {
@@ -590,15 +597,20 @@ function pointerMove(event) {
 
 function canDrawCurrentTool() {
   if (!session.room || session.room.drawerId !== session.playerId || session.room.phase !== "drawing") return false;
-  if (session.room.activeAbilityEffects?.some((effect) =>
-    effect.id === "freeze" && effect.expiresAt > Date.now()
-  )) return false;
+  if (isFreezeActive()) return false;
   const constraint = session.room.constraint;
   if (!constraint?.tools.includes(session.tool)) return false;
   if (constraint.maxItems && session.room.drawing.length >= constraint.maxItems) return false;
   const limit = constraint.limits?.[session.tool];
   if (limit !== undefined && (session.room.drawingUsage?.[session.tool] || 0) >= limit) return false;
   return true;
+}
+
+function isFreezeActive() {
+  return Boolean(session.room?.activeAbilityEffects?.some((effect) =>
+    effect.id === "freeze" && effect.expiresAt > Date.now() &&
+    (Date.now() - effect.startedAt) % 5000 < 1000
+  ));
 }
 
 function appendPenPoint(points, point) {
@@ -736,6 +748,10 @@ function updateCanvasEffects() {
   } else if (!session.room.constraint?.hideExisting || session.room.drawerId !== session.playerId) {
     session.canvas.style.opacity = "1";
   }
+  $(".canvas-fog")?.classList.toggle("active",
+    session.room.drawerId === session.playerId &&
+    session.room.activeAbilityEffects?.some((effect) => effect.id === "fog" && effect.expiresAt > Date.now())
+  );
 }
 
 renderCharacters();

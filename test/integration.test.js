@@ -108,14 +108,20 @@ test("four clients complete a full drawing, guessing and voting round", async ()
     });
     await strokeState;
 
-    const guessingStates = players.map((player) => waitForState(player.socket, (state) => state.phase === "guessing"));
-    players[drawerIndex].socket.emit("drawing:finish");
-    await Promise.all(guessingStates);
-
-    const guesserIndex = drawerIndex === 0 ? 1 : 0;
-    const votingStates = players.map((player) => waitForState(player.socket, (state) => state.phase === "voting"));
-    players[guesserIndex].socket.emit("guess:submit", { guess: drawing[drawerIndex].word });
-    await Promise.all(votingStates);
+    let currentDrawings = drawing;
+    for (let turn = 0; turn < players.length; turn += 1) {
+      const currentDrawerIndex = players.findIndex((player) => player.playerId === currentDrawings[0].drawerId);
+      const currentDrawing = currentDrawings[currentDrawerIndex];
+      const currentGuesserIndex = currentDrawerIndex === 0 ? 1 : 0;
+      const guessingStates = players.map((player) => waitForState(player.socket, (state) => state.phase === "guessing"));
+      players[currentDrawerIndex].socket.emit("drawing:finish");
+      await Promise.all(guessingStates);
+      const nextPhase = turn === players.length - 1 ? "voting" : "drawing";
+      const nextStates = players.map((player) => waitForState(player.socket, (state) => state.phase === nextPhase));
+      players[currentGuesserIndex].socket.emit("guess:submit", { guess: currentDrawing.word });
+      const nextDrawingStates = await Promise.all(nextStates);
+      if (nextPhase === "drawing") currentDrawings = nextDrawingStates;
+    }
 
     const saboteurIndex = drawing.findIndex((state) => state.myRole === "saboteur");
     assert.notEqual(saboteurIndex, -1);

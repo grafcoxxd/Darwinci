@@ -293,6 +293,14 @@ legend span { color: var(--line); text-transform: uppercase; letter-spacing: .1e
 .vote-player:hover { background: #282217; border-color: var(--accent); box-shadow: 0 8px 20px #0003; }
 .vote-progress { display: inline-block; margin-top: 22px; padding: 9px 13px; border-radius: 99px; background: #10151e; color: var(--muted); font-size: 11px; }
 .vote-progress strong { color: var(--text); }
+.cycle-guesses { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 12px 0 24px; }
+.cycle-guesses span { display: grid; gap: 3px; padding: 11px; border: 1px solid #594a36; border-radius: 10px; background: #271f17; }
+.cycle-guesses small { color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .1em; }
+.cycle-guesses strong { color: var(--accent); overflow-wrap: anywhere; }
+.cycle-results { display: grid; gap: 7px; max-width: 650px; margin: 14px auto 0; }
+.cycle-results div { display: grid; grid-template-columns: 60px 1fr auto; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; background: #0f141d; text-align: left; }
+.cycle-results span { color: var(--muted); font-size: 10px; }
+.cycle-results b { font-size: 18px; }
 
 .phase-drawing .lobby-players, .phase-guessing .lobby-players, .phase-voting .lobby-players { grid-area: players; }
 
@@ -345,6 +353,9 @@ legend span { color: var(--line); text-transform: uppercase; letter-spacing: .1e
 .finish-floating { right: 14px; bottom: 14px; width: 205px; min-height: 68px; border-radius: 14px; padding: 14px 17px; box-shadow: 0 10px 30px #0006; }
 .watching-badge { left: 50%; bottom: 17px; transform: translateX(-50%); padding: 10px 14px; background: #111722e8; border: 1px solid #ffffff20; border-radius: 99px; color: var(--muted); font-size: 11px; white-space: nowrap; }
 .watching-badge span { color: var(--green); margin-right: 8px; font-weight: 900; }
+.canvas-fog { position: absolute; inset: 0; z-index: 2; opacity: 0; pointer-events: none; background: radial-gradient(ellipse at 20% 40%, #ffffff00 0 12%, #f6f7fae8 30%, #ffffffad 55%, #f6f7fae8 78%, #ffffff00 100%); transition: opacity .3s; animation: fog-drift 7s ease-in-out infinite alternate; }
+.canvas-fog.active { opacity: .92; }
+@keyframes fog-drift { from { transform: translateX(-8%); } to { transform: translateX(8%); } }
 
 .handicap-list { display: grid; gap: 8px; margin-top: 16px; padding-top: 15px; border-top: 1px solid #ffffff1c; }
 .handicap-item { display: grid; grid-template-columns: 32px auto 1fr; align-items: center; gap: 7px; min-height: 48px; padding: 7px 10px; border: 1px solid #ffffff15; border-radius: 10px; background: #1117207a; }

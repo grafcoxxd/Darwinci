@@ -75,11 +75,13 @@ const GEOMETRY_NAMES = {
 };
 
 const AGENT_ABILITIES = [
-  { id: "time-thief", name: "Zeitdieb", icon: "⏱", duration: 0, description: "Stiehlt 10 Sekunden von der laufenden Zeichenphase." },
-  { id: "blackout", name: "Licht aus", icon: "◐", duration: 5, description: "Der Zeichner sieht seine Leinwand 5 Sekunden lang nicht." },
-  { id: "mirror", name: "Spiegeltrick", icon: "⇄", duration: 7, description: "Die Eingabe des Zeichners wird 7 Sekunden horizontal gespiegelt." },
-  { id: "freeze", name: "Handschelle", icon: "⛓", duration: 4, description: "Der Stift des Zeichners blockiert 4 Sekunden lang." },
-  { id: "heavy-ink", name: "Tintenflut", icon: "●", duration: 7, description: "7 Sekunden lang wird alles neue in riesiger schwarzer Tinte gezeichnet." }
+  { id: "time-thief", name: "Zeitdieb", icon: "⏱", description: "Stiehlt sofort 10 Sekunden von diesem Zeichenzug." },
+  { id: "blackout", name: "Licht aus", icon: "◐", description: "Der Zeichner sieht bis zum Ende seines Zuges keine Leinwand mehr." },
+  { id: "mirror", name: "Spiegeltrick", icon: "⇄", description: "Spiegelt bis zum Ende des Zuges jede Zeichenbewegung horizontal." },
+  { id: "freeze", name: "Handschelle", icon: "⛓", description: "Blockiert den Stift bis zum Zugende alle 5 Sekunden für 1 Sekunde." },
+  { id: "heavy-ink", name: "Tintenflut", icon: "●", description: "Alle weiteren Striche dieses Zuges werden riesig und schwarz." },
+  { id: "tremor", name: "Zitterhand", icon: "≈", description: "Alle weiteren Punkte dieses Zuges werden sichtbar unruhig versetzt." },
+  { id: "fog", name: "Nebelwand", icon: "☁", description: "Eine wandernde Nebelwand verdeckt dem Zeichner ab jetzt Teile der Leinwand." }
 ];
 
 function createId(length = 22) {
@@ -179,6 +181,9 @@ function newRoom(hostName, character) {
       deadline: null,
       roundId: null,
       abilityEffects: [],
+      cyclePlayerIds: [],
+      cycleIndex: 0,
+      cycleResults: [],
       usedWords: [],
       pendingReveal: []
     },
@@ -308,13 +313,48 @@ function startGame(room) {
 }
 
 function startRound(room) {
-  room.players.forEach((player) => { player.sittingOut = false; });
-  const candidates = room.players.filter((player) => player.alive);
+  room.round += 1;
+  const candidates = room.players.filter((player) => player.alive && !player.sittingOut);
   if (!candidates.length) throw new Error("Keine aktiven Spieler übrig.");
-  const previousDrawer = room.game.drawerId;
-  const drawerPool = candidates.filter((player) => player.id !== previousDrawer);
-  const pool = drawerPool.length ? drawerPool : candidates;
-  const drawer = pool[crypto.randomInt(pool.length)];
+  const shuffled = [...candidates];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = crypto.randomInt(index + 1);
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  room.game.cyclePlayerIds = shuffled.map((player) => player.id);
+  room.game.cycleIndex = 0;
+  room.game.cycleResults = [];
+  assignAgentAbilities(room);
+  startTurn(room);
+}
+
+function assignAgentAbilities(room) {
+  room.players.forEach((player) => {
+    const eligible = AGENT_ABILITIES.filter((ability) =>
+      (ability.id !== "mirror" || !room.game.constraint?.mirrorX) &&
+      ability.id !== player.ability
+    );
+    const pool = eligible.length ? eligible : AGENT_ABILITIES;
+    player.ability = player.role === "saboteur" && player.alive && !player.sittingOut
+      ? pool[crypto.randomInt(pool.length)].id
+      : null;
+    player.abilityUsed = false;
+  });
+}
+
+function startTurn(room) {
+  const drawer = room.players.find((player) =>
+    player.id === room.game.cyclePlayerIds[room.game.cycleIndex] && player.alive && !player.sittingOut
+  );
+  if (!drawer) {
+    room.game.cycleIndex += 1;
+    if (room.game.cycleIndex >= room.game.cyclePlayerIds.length) {
+      beginVoting(room);
+      return;
+    }
+    startTurn(room);
+    return;
+  }
   const words = getWords(room.settings);
   const available = words.filter((word) => !room.game.usedWords.includes(word));
   const wordPool = available.length ? available : words;
@@ -323,7 +363,6 @@ function startRound(room) {
   const constraints = CONSTRAINTS[room.settings.difficulty];
   const constraint = materializeConstraint(constraints[crypto.randomInt(constraints.length)]);
 
-  room.round += 1;
   room.game.roundId = createId(14);
   room.game.abilityEffects = [];
   room.phase = "drawing";
@@ -337,13 +376,6 @@ function startRound(room) {
   room.game.voteStartedAt = null;
   room.game.deadline = Date.now() + Math.max(10, Math.round(room.settings.drawTime * (constraint.timeFactor || 1))) * 1000;
   room.game.usedWords.push(word);
-  const abilityPool = AGENT_ABILITIES.filter((ability) => ability.id !== "mirror" || !constraint.mirrorX);
-  room.players.forEach((player) => {
-    player.ability = player.role === "saboteur" && player.alive
-      ? abilityPool[crypto.randomInt(abilityPool.length)].id
-      : null;
-    player.abilityUsed = false;
-  });
 }
 
 function submitGuess(room, playerId, guess) {
@@ -356,17 +388,36 @@ function submitGuess(room, playerId, guess) {
   if (!normalized) throw new Error("Die Lösung darf nicht leer sein.");
   room.game.guess = normalized;
   room.game.correct = normalized.localeCompare(room.game.word, "de", { sensitivity: "base" }) === 0;
-  room.game.deadline = Date.now() + 60_000;
-  room.phase = "voting";
-  room.game.voteStartedAt = Date.now();
-  room.game.votes = {};
-  if (isOnlyPlayer) resolveVoting(room);
+  room.game.cycleResults.push({
+    drawerId: room.game.drawerId,
+    roundId: room.game.roundId,
+    word: room.game.word,
+    guess: room.game.guess,
+    correct: room.game.correct
+  });
+  room.game.cycleIndex += 1;
+  if (isOnlyPlayer) {
+    beginVoting(room);
+    resolveVoting(room);
+  } else if (room.game.cycleIndex >= room.game.cyclePlayerIds.length) {
+    beginVoting(room);
+  } else {
+    startTurn(room);
+  }
 }
 
 function finishDrawing(room) {
   if (room.phase !== "drawing") return;
   room.phase = "guessing";
   room.game.deadline = Date.now() + 60_000;
+}
+
+function beginVoting(room) {
+  room.phase = "voting";
+  room.game.voteStartedAt = Date.now();
+  room.game.votes = {};
+  room.game.deadline = Date.now() + 90_000;
+  room.game.abilityEffects = [];
 }
 
 function drawingUsage(room) {
@@ -381,13 +432,28 @@ function activeAbilityEffects(room, now = Date.now()) {
 }
 
 function hasAbilityEffect(room, id) {
-  return activeAbilityEffects(room).some((effect) => effect.id === id);
+  return activeAbilityEffects(room).some((effect) => effect.id === id && isAbilityEffectActive(effect));
+}
+
+function isAbilityEffectActive(effect, now = Date.now()) {
+  if (effect.id !== "freeze") return effect.expiresAt > now;
+  const elapsed = Math.max(0, now - effect.startedAt);
+  return elapsed % 5000 < 1000 && effect.expiresAt > now;
 }
 
 function mirrorDrawing(room, point) {
   return Boolean(room.game.constraint?.mirrorX) !== hasAbilityEffect(room, "mirror")
     ? { ...point, x: 1 - point.x }
     : point;
+}
+
+function distortDrawing(room, point) {
+  if (!hasAbilityEffect(room, "tremor")) return point;
+  const seed = point.x * 173 + point.y * 91;
+  return {
+    x: Math.max(0, Math.min(1, point.x + Math.sin(seed * 8) * 0.012)),
+    y: Math.max(0, Math.min(1, point.y + Math.cos(seed * 6) * 0.01))
+  };
 }
 
 function drawingStrokeStyle(room, color, width) {
@@ -415,7 +481,8 @@ function useAgentAbility(room, playerId) {
       id: ability.id,
       usedBy: playerId,
       roundId: room.game.roundId,
-      expiresAt: Date.now() + ability.duration * 1000
+      startedAt: Date.now(),
+      expiresAt: room.game.deadline
     });
   }
   return ability;
@@ -463,9 +530,9 @@ function addDrawingItem(room, playerId, input) {
       throw new Error("Ziehe die Form etwas größer.");
     }
   }
-  if (item.points) item.points = item.points.map((point) => mirrorDrawing(room, point));
-  if (item.from) item.from = mirrorDrawing(room, item.from);
-  if (item.to) item.to = mirrorDrawing(room, item.to);
+  if (item.points) item.points = item.points.map((point) => distortDrawing(room, mirrorDrawing(room, point)));
+  if (item.from) item.from = distortDrawing(room, mirrorDrawing(room, item.from));
+  if (item.to) item.to = distortDrawing(room, mirrorDrawing(room, item.to));
   room.drawing.push(item);
 }
 
@@ -485,7 +552,7 @@ function createDrawingPreview(drawState, playerId, input) {
     throw new Error("Nur der Zeichner darf eine Live-Vorschau senden.");
   }
   if (input.roundId !== drawState.roundId) throw new Error("Die Vorschau gehört zu einer alten Runde.");
-  if (activeAbilityEffects({ game: drawState }).some((effect) => effect.id === "freeze")) {
+  if (hasAbilityEffect({ game: drawState }, "freeze")) {
     throw new Error("Der Stift ist gerade blockiert.");
   }
   const constraint = compatibleConstraint(drawState.constraint, drawState.difficulty);
@@ -512,11 +579,17 @@ function createDrawingPreview(drawState, playerId, input) {
     preview.from = clampPoint(input.from);
     preview.to = clampPoint(input.to);
   }
-  if (constraint.mirrorX !== activeAbilityEffects({ game: drawState }).some((effect) => effect.id === "mirror")) {
+  if (constraint.mirrorX !== hasAbilityEffect({ game: drawState }, "mirror")) {
     const mirror = (point) => ({ ...point, x: 1 - point.x });
     if (preview.points) preview.points = preview.points.map(mirror);
     if (preview.from) preview.from = mirror(preview.from);
     if (preview.to) preview.to = mirror(preview.to);
+  }
+  if (hasAbilityEffect({ game: drawState }, "tremor")) {
+    const distort = (point) => distortDrawing({ game: drawState }, point);
+    if (preview.points) preview.points = preview.points.map(distort);
+    if (preview.from) preview.from = distort(preview.from);
+    if (preview.to) preview.to = distort(preview.to);
   }
   return preview;
 }
@@ -550,6 +623,9 @@ function resolveVoting(room) {
   const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   const tied = entries.length && (!entries[1] || entries[0][1] !== entries[1][1]);
   let ejected = null;
+  room.players.forEach((player) => {
+    if (player.sittingOut) player.sittingOut = false;
+  });
   if (tied) {
     ejected = room.players.find((player) => player.id === entries[0][0]);
   }
@@ -569,8 +645,9 @@ function resolveVoting(room) {
     votes: counts,
     tie: !tied
   };
-  if (room.game.correct) room.score += 1;
-  room.game.pendingReveal.push(reveal);
+  reveal.cycleResults = room.game.cycleResults;
+  room.score += room.game.cycleResults.filter((result) => result.correct).length;
+  room.game.pendingReveal.push(...room.game.cycleResults.map((result) => ({ ...result, round: room.round })));
 
   const winner = determineWinner(room);
   const roundEnd = Date.now() + 12_000;
@@ -602,9 +679,16 @@ function advanceTimers(room) {
   else if (room.phase === "guessing") {
     room.game.guess = "Keine Lösung";
     room.game.correct = false;
-    room.phase = "voting";
-    room.game.voteStartedAt = Date.now();
-    room.game.deadline = Date.now() + 60_000;
+    room.game.cycleResults.push({
+      drawerId: room.game.drawerId,
+      roundId: room.game.roundId,
+      word: room.game.word,
+      guess: room.game.guess,
+      correct: false
+    });
+    room.game.cycleIndex += 1;
+    if (room.game.cycleIndex >= room.game.cyclePlayerIds.length) beginVoting(room);
+    else startTurn(room);
   } else if (room.phase === "voting") resolveVoting(room);
   else if (room.phase === "result") {
     if (determineWinner(room)) {
@@ -625,7 +709,10 @@ function resetToLobby(room) {
   room.game = {
     drawerId: null, word: null, constraint: null, guess: "", correct: null,
     votes: {}, voteStartedAt: null, deadline: null, roundId: null, usedWords: [], pendingReveal: [],
-    abilityEffects: []
+    abilityEffects: [],
+    cyclePlayerIds: [],
+    cycleIndex: 0,
+    cycleResults: []
   };
   room.players.forEach((player) => {
     player.role = null;
@@ -671,7 +758,12 @@ function publicState(room, viewerId) {
     me: viewerId,
     myRole: viewer.role,
     drawerId: room.game.drawerId,
-    activeAbilityEffects: activeAbilityEffects(room).map(({ id, expiresAt }) => ({ id, expiresAt })),
+    activeAbilityEffects: activeAbilityEffects(room).map(({ id, expiresAt, startedAt }) => ({ id, expiresAt, startedAt })),
+    cycleProgress: {
+      current: Math.min(room.game.cycleIndex + (room.phase === "drawing" || room.phase === "guessing" ? 1 : 0), room.game.cyclePlayerIds.length),
+      total: room.game.cyclePlayerIds.length,
+      results: room.game.cycleResults.map(({ drawerId, guess }) => ({ drawerId, guess }))
+    },
     myAbility: viewer.role === "saboteur" && viewer.ability
       ? { ...AGENT_ABILITIES.find((ability) => ability.id === viewer.ability), used: viewer.abilityUsed }
       : null,
@@ -695,7 +787,10 @@ function publicState(room, viewerId) {
       ejectedId: room.game.lastResult.ejectedId,
       ejectedName: room.game.lastResult.ejectedName,
       winner: room.game.lastResult.winner,
-      tie: room.game.lastResult.tie
+      tie: room.game.lastResult.tie,
+      cycleResults: room.settings.revealTiming === "immediate" || room.phase === "gameover"
+        ? room.game.lastResult.cycleResults || []
+        : []
     } : null,
     pendingReveal: room.phase === "gameover" ? room.game.pendingReveal : [],
     characters: CHARACTERS,
