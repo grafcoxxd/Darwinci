@@ -296,6 +296,65 @@ legend span { color: var(--line); text-transform: uppercase; letter-spacing: .1e
 
 .phase-drawing .lobby-players, .phase-guessing .lobby-players, .phase-voting .lobby-players { grid-area: players; }
 
+/* Focused drawing workspace */
+.game-active .phase-drawing {
+  grid-template-columns: 190px minmax(680px, 1fr) 255px !important;
+}
+.game-active .phase-drawing .game-header {
+  min-height: 88px;
+}
+.phase-drawing .phase-track { display: none; }
+.phase-drawing .game-header { grid-template-columns: 1fr minmax(260px, 420px) 1fr; }
+.main-timer { justify-self: center; min-width: 260px; text-align: center; padding: 7px 20px; border: 1px solid #80613a; background: linear-gradient(180deg, #34291c, #171b22); border-radius: 15px; box-shadow: 0 8px 26px #0005, inset 0 1px #ffffff12; }
+.main-timer span { display: block; color: #c7ad80; font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.main-timer strong { display: block; margin-top: -2px; color: var(--accent); font-size: clamp(34px, 4vw, 48px); line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: .03em; }
+.main-timer.urgent { box-shadow: 0 0 0 1px #ffb3471c, 0 10px 35px #0006; }
+.phase-drawing .header-actions { gap: 7px; }
+.role-badge { display: flex; align-items: center; gap: 9px; min-width: 126px; padding: 8px 11px; border: 1px solid; border-radius: 12px; }
+.role-badge.good { background: #172b22; border-color: #2f8e61; color: #8ce2b2; }
+.role-badge.saboteur { background: #32191d; border-color: #b84d58; color: #ff979d; }
+.role-badge > span { font-size: 22px; }
+.role-badge small { display: block; font-size: 7px; letter-spacing: .12em; font-weight: 900; opacity: .75; }
+.role-badge strong { display: block; font-size: 13px; line-height: 1.1; margin-top: 2px; }
+.role-reveal { position: fixed; z-index: 20; left: 50%; top: 48%; transform: translate(-50%, -50%); width: min(420px, calc(100% - 40px)); border: 1px solid; border-radius: 24px; padding: 34px; text-align: center; box-shadow: 0 30px 100px #000c; transition: opacity .4s, transform .4s; }
+.role-reveal.good { background: linear-gradient(145deg, #18382a, #15251f); border-color: #52c187; color: #9de7bd; }
+.role-reveal.saboteur { background: linear-gradient(145deg, #471d24, #24171b); border-color: #dd6871; color: #ff9ca3; }
+.role-reveal > span { display: block; font-size: 50px; }
+.role-reveal small { display: block; margin-top: 10px; font-size: 10px; letter-spacing: .18em; font-weight: 900; }
+.role-reveal strong { display: block; margin-top: 4px; color: var(--text); font-size: 42px; }
+.role-reveal p { color: #ddd; margin: 10px auto 0; max-width: 290px; line-height: 1.5; }
+.role-reveal.dismissed { opacity: 0; transform: translate(-50%, -54%) scale(.96); pointer-events: none; }
+
+.phase-drawing .canvas-stage { padding: 0 !important; border: 0; background: #0b0f16; overflow: visible; }
+.phase-drawing .canvas-wrap { min-height: calc(100vh - 118px); height: calc(100vh - 118px); border: 1px solid #4a5363; border-radius: 16px; box-shadow: 0 16px 55px #0006; }
+.phase-drawing #drawing-canvas { min-height: 100%; height: 100%; }
+.canvas-caption { position: absolute; left: 14px; top: 13px; z-index: 3; pointer-events: none; display: grid; text-shadow: 0 1px 2px #fff9; }
+.canvas-caption .eyebrow { color: #82622c; font-size: 8px; }
+.canvas-caption strong { color: #202632; font-size: 13px; }
+.canvas-colors, .canvas-corrections, .canvas-bottom-tools, .watching-badge, .finish-floating { position: absolute; z-index: 4; }
+.canvas-colors { left: 14px; top: 55px; display: flex; gap: 7px; padding: 7px; background: #111722e8; border: 1px solid #ffffff18; border-radius: 12px; box-shadow: 0 6px 18px #0003; }
+.canvas-corrections { top: 14px; right: 14px; display: flex; gap: 7px; }
+.canvas-control { width: 40px; height: 40px; border-radius: 10px; border: 1px solid #ffffff20; background: #111722e8; color: var(--text); font-size: 23px; box-shadow: 0 6px 18px #0003; }
+.canvas-bottom-tools { left: 14px; right: 14px; bottom: 14px; width: calc(100% - 245px); min-height: 68px; display: flex; align-items: center; gap: 14px; padding: 8px; background: #111722ee; border: 1px solid #ffffff20; border-radius: 14px; box-shadow: 0 8px 28px #0005; backdrop-filter: blur(8px); }
+.canvas-bottom-tools .tool-palette { margin: 0; flex-wrap: nowrap; }
+.canvas-bottom-tools .tool-button { min-width: 66px; background: #202735; }
+.width-control { min-width: 150px; flex: 1; color: #b8c0cc; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.width-control span { display: flex; justify-content: space-between; padding: 0 2px 5px; }
+.width-control b { color: var(--accent); font-size: 10px; }
+.width-control input { accent-color: var(--accent); width: 100%; padding: 0; border: 0; box-shadow: none; cursor: ew-resize; }
+.finish-floating { right: 14px; bottom: 14px; width: 205px; min-height: 68px; border-radius: 14px; padding: 14px 17px; box-shadow: 0 10px 30px #0006; }
+.watching-badge { left: 50%; bottom: 17px; transform: translateX(-50%); padding: 10px 14px; background: #111722e8; border: 1px solid #ffffff20; border-radius: 99px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.watching-badge span { color: var(--green); margin-right: 8px; font-weight: 900; }
+
+.handicap-list { display: grid; gap: 8px; margin-top: 16px; padding-top: 15px; border-top: 1px solid #ffffff1c; }
+.handicap-item { display: grid; grid-template-columns: 38px 1fr; align-items: center; gap: 10px; padding: 9px; border: 1px solid #ffffff15; border-radius: 10px; background: #1117207a; }
+.handicap-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: #ffb3471c; color: var(--accent); font-size: 22px; }
+.handicap-item strong { display: block; color: var(--text); font-size: 12px; }
+.handicap-item small { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; line-height: 1.35; }
+.phase-drawing .mission-sidebar { grid-area: mission; max-height: calc(100vh - 112px); overflow: auto; }
+.phase-drawing .mission-sidebar .secret-card { margin-bottom: 12px; }
+.phase-drawing .mission-sidebar .secret-word { font-size: clamp(27px, 2.5vw, 40px); }
+
 @media (max-width: 1180px) {
   .game-active .game-shell, .phase-lobby { grid-template-columns: 190px minmax(0, 1fr) !important; grid-template-areas: "header header" "main main" "players mission" !important; }
   .phase-lobby { grid-template-areas: "header header" "main main" "players settings" !important; }
@@ -308,6 +367,10 @@ legend span { color: var(--line); text-transform: uppercase; letter-spacing: .1e
   .phase-guessing .decision-stage, .phase-voting .decision-stage { min-height: 480px; }
   .canvas-wrap { min-height: clamp(380px, 58vh, 650px); }
   #drawing-canvas { min-height: clamp(372px, calc(58vh - 8px), 642px); }
+  .game-active .phase-drawing { grid-template-columns: 150px minmax(0, 1fr) 220px !important; }
+  .canvas-bottom-tools { width: calc(100% - 228px); gap: 8px; }
+  .canvas-bottom-tools .tool-button { min-width: 56px; }
+  .width-control { min-width: 110px; }
 }
 
 @media (max-width: 760px) {
@@ -342,4 +405,22 @@ legend span { color: var(--line); text-transform: uppercase; letter-spacing: .1e
   .vote-grid { grid-template-columns: 1fr 1fr; }
   .vote-player { min-height: 68px; }
   .waiting-seats { grid-template-columns: repeat(2, 1fr); }
+  .game-active .phase-drawing .game-header { display: grid; grid-template-columns: 1fr; }
+  .phase-drawing .game-header .game-brand { display: none; }
+  .phase-drawing .main-timer { grid-row: 1; width: 100%; min-width: 0; padding: 6px 12px; }
+  .phase-drawing .main-timer strong { font-size: 40px; }
+  .phase-drawing .header-actions { justify-content: space-between; grid-row: 2; }
+  .role-badge { min-width: 0; flex: 1; }
+  .phase-drawing .canvas-stage { order: 1; padding: 0 !important; }
+  .phase-drawing .canvas-wrap, .phase-drawing #drawing-canvas { min-height: 510px; height: 66vh; }
+  .canvas-caption { top: 10px; }
+  .canvas-colors { top: 52px; left: 9px; }
+  .canvas-corrections { top: 9px; right: 9px; }
+  .canvas-bottom-tools { left: 9px; right: 9px; bottom: 76px; width: auto; align-items: stretch; flex-direction: column; }
+  .canvas-bottom-tools .tool-palette { flex-wrap: wrap; }
+  .canvas-bottom-tools .tool-button { flex: 1; }
+  .width-control { width: 100%; }
+  .finish-floating { left: 9px; right: 9px; bottom: 9px; width: auto; min-height: 58px; }
+  .phase-drawing .mission-sidebar { display: block; max-height: none; }
+  .phase-drawing .mission-sidebar .handicap-list { grid-template-columns: 1fr; }
 }

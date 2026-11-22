@@ -378,7 +378,7 @@ function addDrawingItem(room, playerId, input) {
   if (constraint.fixedColor && color !== constraint.fixedColor) {
     throw new Error("Diese Runde erfordert die festgelegte Farbe.");
   }
-  const width = Math.max(1, Math.min(12, Number(input.width) || 3));
+  const width = Math.max(1, Math.min(32, Number(input.width) || 4));
   const clampPoint = (point) => ({
     x: Math.max(0, Math.min(1, Number(point?.x) || 0)),
     y: Math.max(0, Math.min(1, Number(point?.y) || 0))

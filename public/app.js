@@ -217,6 +217,33 @@ function rolePanel(room) {
   </div>`;
 }
 
+function handicapRows(constraint) {
+  if (!constraint) return [];
+  const rows = [];
+  const icons = { pen: "✎", line: "╱", ellipse: "◯", rectangle: "▭" };
+  const labels = { pen: "Freihandstrich", line: "gerade Linie", ellipse: "Ellipse", rectangle: "Rechteck" };
+  if (constraint.limits) {
+    for (const [tool, limit] of Object.entries(constraint.limits)) {
+      rows.push({ icon: icons[tool] || "⌗", title: `Max. ${limit}×`, text: labels[tool] || tool });
+    }
+  } else if (constraint.maxItems) {
+    rows.push({ icon: "⌗", title: `${constraint.maxItems} Formen`, text: "nur die erlaubten Werkzeuge" });
+  }
+  if (constraint.timeFactor) {
+    rows.push({ icon: "⏱", title: `${Math.round(constraint.timeFactor * 100)} % Zeit`, text: "Zeichenphase verkürzt" });
+  }
+  if (constraint.mirrorX) rows.push({ icon: "⇄", title: "Gespiegelt", text: "deine Eingabe wird horizontal invertiert" });
+  if (constraint.hideExisting) rows.push({ icon: "◉", title: "Blind", text: "bereits Gezeichnetes bleibt verborgen" });
+  if (constraint.singleColor || constraint.fixedColor) {
+    rows.push({ icon: "●", title: constraint.fixedColor ? "Nur Schwarz" : "Eine Farbe", text: "Farbwechsel nicht erlaubt" });
+  }
+  if (constraint.allowUndo === false) rows.push({ icon: "↶", title: "Kein Rückgängig", text: "jede Aktion ist verbindlich" });
+  if (constraint.allowClear === false && constraint.allowUndo !== false) {
+    rows.push({ icon: "⌫", title: "Nicht leeren", text: "die Leinwand bleibt bestehen" });
+  }
+  return rows;
+}
+
 function canvasView(room) {
   const isDrawer = room.drawerId === room.me;
   const drawer = room.players.find((player) => player.id === room.drawerId);
@@ -238,18 +265,21 @@ function canvasView(room) {
     </button>`;
   }).join("") : "";
   const color = constraint?.fixedColor || session.color;
-  const secret = room.word ? `<div class="role-card secret-card"><span class="eyebrow">${isDrawer ? "GEHEIMES WORT" : "DEIN WISSEN"}</span><div class="secret-word">${escapeHtml(room.word)}</div>${constraint ? `<p class="constraint-copy">${escapeHtml(constraint.label)}</p>` : ""}</div>` : "";
+  const handicaps = handicapRows(constraint);
+  const secret = room.word ? `<div class="role-card secret-card"><span class="eyebrow">${isDrawer ? "GEHEIMES WORT" : "DEIN WISSEN"}</span><div class="secret-word">${escapeHtml(room.word)}</div>${isDrawer ? `<div class="handicap-list">${handicaps.map((item) => `<div class="handicap-item"><span class="handicap-icon">${item.icon}</span><div><strong>${item.title}</strong><small>${item.text}</small></div></div>`).join("")}</div>` : ""}</div>` : "";
   return `<section class="main-stage canvas-stage panel">
-    <div class="stage-title-row"><div><span class="eyebrow">ZEICHNUNG · RUNDE ${room.round}</span><h2>${isDrawer ? "Du bist am Stift" : `${escapeHtml(drawer?.name || "Jemand")} zeichnet`}</h2></div><div class="drawer-chip"><span>${isDrawer ? "✎" : drawer?.character.icon || "✎"}</span>${isDrawer ? "Zeichner" : "Zuschauen"}</div></div>
-    ${isDrawer ? `<div class="drawing-toolbar"><div class="tool-palette">${toolHtml}</div><div class="canvas-tools">${["#151927", "#ef4444", "#3b82f6", "#22c55e", "#f59e0b"].map((swatch) => `<button class="color-swatch ${color === swatch ? "selected" : ""}" data-color="${swatch}" ${constraint.fixedColor && swatch !== constraint.fixedColor ? "disabled" : ""} style="background:${swatch}" aria-label="Farbe ${swatch}"></button>`).join("")}
-      <select id="stroke-width" class="width-select" aria-label="Strichbreite"><option value="2" ${session.width === 2 ? "selected" : ""}>2 px</option><option value="4" ${session.width === 4 ? "selected" : ""}>4 px</option><option value="8" ${session.width === 8 ? "selected" : ""}>8 px</option></select>
-      ${constraint.allowUndo === false ? "" : '<button id="undo-canvas" class="secondary icon-button" title="Letzte Form rückgängig" aria-label="Rückgängig">↶</button>'}
-      ${constraint.allowClear === false ? "" : '<button id="clear-canvas" class="secondary" aria-label="Leinwand löschen">Leeren</button>'}</div></div>
-      <div class="constraint-strip"><b>⚡ Einschränkung</b><span>${escapeHtml(constraint.label)}</span></div>` : ""}
-    <div class="canvas-wrap"><canvas id="drawing-canvas" class="${isDrawer ? "" : "canvas-disabled"}"></canvas></div>
-    <div class="canvas-footer">${isDrawer ? '<span>Wenn du fertig bist, kann die Gruppe raten.</span><button id="finish-drawing" class="primary finish-button">Zeichnung abgeben <span>→</span></button>' : '<span class="live-indicator">● LIVE</span><span>Diskutiert über Voice-Chat und einigt euch auf eure Vermutung.</span>'}</div>
+    <div class="canvas-wrap"><canvas id="drawing-canvas" class="${isDrawer ? "" : "canvas-disabled"}"></canvas>
+      <div class="canvas-caption"><span class="eyebrow">RUNDE ${room.round}</span><strong>${isDrawer ? "Du zeichnest" : `${escapeHtml(drawer?.name || "Jemand")} zeichnet`}</strong></div>
+      ${isDrawer ? `<div class="canvas-colors">${["#151927", "#ef4444", "#3b82f6", "#22c55e", "#f59e0b"].map((swatch) => `<button class="color-swatch ${color === swatch ? "selected" : ""}" data-color="${swatch}" ${constraint.fixedColor && swatch !== constraint.fixedColor ? "disabled" : ""} style="background:${swatch}" aria-label="Farbe ${swatch}"></button>`).join("")}</div>
+      <div class="canvas-corrections">
+        ${constraint.allowUndo === false ? "" : '<button id="undo-canvas" class="canvas-control" title="Letzte Form rückgängig" aria-label="Rückgängig">↶</button>'}
+        ${constraint.allowClear === false ? "" : '<button id="clear-canvas" class="canvas-control" title="Leinwand leeren" aria-label="Leinwand leeren">⌫</button>'}
+      </div>
+      <div class="canvas-bottom-tools"><div class="tool-palette">${toolHtml}</div><label class="width-control"><span>Strichstärke <b id="width-value">${session.width}px</b></span><input id="stroke-width" type="range" min="2" max="32" step="1" value="${session.width}" aria-label="Strichstärke"></label></div>
+      <button id="finish-drawing" class="primary finish-floating">Zeichnung abgeben <span>→</span></button>` : '<div class="watching-badge"><span>● LIVE</span> Gemeinschaftlich im Voice-Chat raten</div>'}
+    </div>
   </section>
-  <aside class="sidebar mission-sidebar panel"><div class="sidebar-heading"><div><span class="eyebrow">DEINE MISSION</span><h3>Geheime Infos</h3></div></div>${rolePanel(room)}${secret}
+  <aside class="sidebar mission-sidebar panel"><div class="sidebar-heading"><div><span class="eyebrow">ZEICHENAUFTRAG</span><h3>${isDrawer ? "Dein Auftrag" : "Deine Mission"}</h3></div></div>${secret}
     <div class="score-card"><span>Punktestand</span><strong>${room.score === null ? "?" : `${room.score} / ${room.targetScore}`}</strong><small>${room.score === null ? "Bis zur Auflösung verdeckt" : "richtige Wörter für den Gruppensieg"}</small></div>
   </aside>`;
 }
@@ -316,15 +346,22 @@ function renderGame() {
     room.phase === "result" ? resultView(room) : gameoverView(room);
   $("#app").classList.add("game-active");
   $(".brand").classList.add("hidden");
+  const revealRole = room.phase === "drawing" && !sessionStorage.getItem(`ss_role_${room.code}`);
+  const roleBadge = room.phase === "lobby" ? "" : `<div class="role-badge ${room.myRole === "saboteur" ? "saboteur" : "good"}"><span>${room.myRole === "saboteur" ? "🕶" : "✦"}</span><div><small>DEINE ROLLE</small><strong>${room.myRole === "saboteur" ? "Saboteur" : "Gut"}</strong></div></div>`;
   $("#game").innerHTML = `<div class="game-shell phase-${room.phase}">
     <header class="game-header panel"><div class="game-brand"><span class="brand-mark">✦</span><div><strong>Darwinci</strong><button data-copy-code class="inline-code">LOBBY ${room.code}</button></div></div>
-      <div class="phase-track"><div class="phase-current"><span>${phaseText(room.phase)}</span><strong>${room.round ? `Runde ${room.round}` : "Lobby"}</strong></div><div class="phase-steps"><span class="${room.phase === "drawing" ? "active" : ""}">Zeichnen</span><i></i><span class="${room.phase === "guessing" ? "active" : ""}">Raten</span><i></i><span class="${room.phase === "voting" ? "active" : ""}">Abstimmen</span></div></div>
-      <div class="header-actions"><div class="goal-stat"><span>ZIEL</span><strong>${room.score === null ? "?" : room.score}/${room.targetScore}</strong></div><div class="timer" id="phase-timer"><span>ZEIT</span><strong>${formatTime(room.deadline)}</strong></div><button id="leave-room" class="secondary compact" aria-label="Lobby verlassen">Verlassen</button></div>
+      <div class="main-timer ${room.phase === "drawing" ? "urgent" : ""}" id="phase-timer"><span>${phaseText(room.phase)} · ${room.round ? `Runde ${room.round}` : "Wartebereich"}</span><strong>${formatTime(room.deadline)}</strong></div>
+      <div class="header-actions"><div class="goal-stat"><span>ZIEL</span><strong>${room.score === null ? "?" : room.score}/${room.targetScore}</strong></div>${roleBadge}<button id="leave-room" class="secondary compact" aria-label="Lobby verlassen">Verlassen</button></div>
     </header>
+    ${revealRole ? `<div class="role-reveal ${room.myRole === "saboteur" ? "saboteur" : "good"}"><span>${room.myRole === "saboteur" ? "🕶" : "✦"}</span><small>DEINE GEHEIME ROLLE</small><strong>${room.myRole === "saboteur" ? "Saboteur" : "Gut"}</strong><p>${room.myRole === "saboteur" ? "Sorge dafür, dass die Gruppe das falsche Wort einloggt." : "Ratet richtig und entlarvt die Saboteure."}</p></div>` : ""}
     ${room.phase !== "lobby" && room.phase !== "gameover" ? `<aside class="sidebar panel"><h3>Spieler · ${room.players.filter(p => p.alive).length} aktiv</h3>${renderPlayerList(room)}</aside>` : ""}
     ${stage}
   </div>`;
   bindGameControls();
+  if (revealRole) {
+    sessionStorage.setItem(`ss_role_${room.code}`, "1");
+    setTimeout(() => $(".role-reveal")?.classList.add("dismissed"), 2600);
+  }
   if (room.phase === "drawing") setupCanvas();
   const guessInput = $("#guess-input");
   if (guessInput && restoreGuessFocus) {
@@ -391,7 +428,10 @@ function setupCanvas() {
     session.color = button.dataset.color;
     $$("[data-color]").forEach((item) => item.classList.toggle("selected", item === button));
   }));
-  $("#stroke-width")?.addEventListener("change", (event) => { session.width = Number(event.target.value); });
+  $("#stroke-width")?.addEventListener("input", (event) => {
+    session.width = Number(event.target.value);
+    $("#width-value").textContent = `${session.width}px`;
+  });
   $("#clear-canvas")?.addEventListener("click", () => session.socket.emit("drawing:clear", { roundId: session.roundId }));
   $("#undo-canvas")?.addEventListener("click", () => session.socket.emit("drawing:undo", { roundId: session.roundId }));
   canvas.addEventListener("pointerdown", pointerDown);
