@@ -89,6 +89,13 @@ function broadcastRoom(room) {
   for (const socket of io.sockets.sockets.values()) {
     const data = activeSockets.get(socket.id);
     if (data?.code !== room.code) continue;
+    data.drawState = {
+      phase: room.phase,
+      drawerId: room.game.drawerId,
+      roundId: room.game.roundId,
+      constraint: room.game.constraint,
+      difficulty: room.settings.difficulty
+    };
     try {
       socket.emit("room:state", game.publicState(room, data.playerId));
     } catch {
@@ -175,6 +182,16 @@ io.on("connection", (socket) => {
     await mutateAndBroadcast(session.code, async (room) => {
       game.addDrawingItem(room, session.playerId, mark);
     });
+  }));
+
+  socket.on("drawing:preview", socketAction(socket, async (session, payload) => {
+    if (payload.clear) {
+      if (payload.roundId !== session.drawState?.roundId || session.drawState?.drawerId !== session.playerId) return;
+      socket.to(session.code).emit("drawing:preview", { roundId: payload.roundId, preview: null });
+      return;
+    }
+    const preview = game.createDrawingPreview(session.drawState, session.playerId, payload);
+    socket.to(session.code).emit("drawing:preview", { roundId: preview.roundId, preview });
   }));
 
   socket.on("drawing:clear", socketAction(socket, async (session, payload) => {

@@ -415,6 +415,41 @@ function clearDrawing(room, playerId, roundId) {
   room.drawing = [];
 }
 
+function createDrawingPreview(drawState, playerId, input) {
+  if (drawState?.phase !== "drawing" || drawState.drawerId !== playerId) {
+    throw new Error("Nur der Zeichner darf eine Live-Vorschau senden.");
+  }
+  if (input.roundId !== drawState.roundId) throw new Error("Die Vorschau gehört zu einer alten Runde.");
+  const constraint = compatibleConstraint(drawState.constraint, drawState.difficulty);
+  const type = String(input.type || "");
+  if (!constraint.tools.includes(type)) throw new Error("Dieses Werkzeug ist nicht erlaubt.");
+  const clampPoint = (point) => ({
+    x: Math.max(0, Math.min(1, Number(point?.x) || 0)),
+    y: Math.max(0, Math.min(1, Number(point?.y) || 0))
+  });
+  const preview = {
+    type,
+    roundId: drawState.roundId,
+    color: /^#[0-9a-f]{6}$/i.test(input.color) ? input.color : "#151927",
+    width: Math.max(1, Math.min(32, Number(input.width) || 4))
+  };
+  if (constraint.fixedColor) preview.color = constraint.fixedColor;
+  if (type === "pen") {
+    preview.points = Array.isArray(input.points) ? input.points.slice(0, 700).map(clampPoint) : [];
+    if (!preview.points.length) throw new Error("Die Vorschau enthält keine Punkte.");
+  } else {
+    preview.from = clampPoint(input.from);
+    preview.to = clampPoint(input.to);
+  }
+  if (constraint.mirrorX) {
+    const mirror = (point) => ({ ...point, x: 1 - point.x });
+    if (preview.points) preview.points = preview.points.map(mirror);
+    if (preview.from) preview.from = mirror(preview.from);
+    if (preview.to) preview.to = mirror(preview.to);
+  }
+  return preview;
+}
+
 function undoDrawing(room, playerId, roundId) {
   if (room.phase !== "drawing" || room.game.drawerId !== playerId) {
     throw new Error("Nur der Zeichner kann während der Zeichenphase rückgängig machen.");
@@ -597,7 +632,7 @@ function publicState(room, viewerId) {
 }
 
 module.exports = {
-  addDrawingItem, addPlayer, advanceTimers, castVote, CHARACTERS, clearDrawing,
+  addDrawingItem, addPlayer, advanceTimers, castVote, CHARACTERS, clearDrawing, createDrawingPreview,
   finishDrawing, leaveRoom, newRoom, publicState, resetToLobby, resolveVoting,
   sanitizeSettings, startGame, startRound, submitGuess, undoDrawing
 };

@@ -136,6 +136,35 @@ test("preserves complete long freehand strokes", () => {
   assert.ok(stored.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)));
 });
 
+test("creates mirrored live previews without changing the persisted drawing", () => {
+  const room = createReadyRoom();
+  game.startGame(room);
+  room.game.constraint = {
+    id: "live-preview",
+    label: "Gespiegelt",
+    tools: ["pen"],
+    mirrorX: true
+  };
+  const before = room.drawing.length;
+  const preview = game.createDrawingPreview({
+    phase: "drawing",
+    drawerId: room.game.drawerId,
+    roundId: room.game.roundId,
+    constraint: room.game.constraint,
+    difficulty: room.settings.difficulty
+  }, room.game.drawerId, {
+    roundId: room.game.roundId,
+    type: "pen",
+    color: "#151927",
+    width: 8,
+    points: [{ x: 0.2, y: 0.3 }, { x: 0.4, y: 0.6 }]
+  });
+
+  assert.equal(room.drawing.length, before);
+  assert.deepEqual(preview.points[0], { x: 0.8, y: 0.3 });
+  assert.deepEqual(preview.points[1], { x: 0.6, y: 0.6 });
+});
+
 test("random geometry restrictions distribute exactly five forms", () => {
   const distributions = new Set();
   const room = createReadyRoom();

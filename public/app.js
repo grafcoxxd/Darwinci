@@ -17,6 +17,10 @@ const session = {
   roundId: null,
   canvas: null,
   context: null,
+  remotePreview: null,
+  lastPreviewAt: 0,
+  blindFadeStartedAt: null,
+  blindFadeFrame: null,
   tab: "create"
 };
 
@@ -77,6 +81,9 @@ function connect() {
       session.canvas = null;
       session.context = null;
       session.guessDraft = "";
+      session.remotePreview = null;
+      session.blindFadeStartedAt = null;
+      session.lastPreviewAt = 0;
     }
     session.room = state;
     $("#entry").classList.add("hidden");
@@ -84,6 +91,11 @@ function connect() {
     renderGame();
   });
   session.socket.on("error:message", toast);
+  session.socket.on("drawing:preview", ({ roundId, preview }) => {
+    if (roundId !== session.room?.roundId || session.room?.drawerId === session.playerId) return;
+    session.remotePreview = preview;
+    redraw();
+  });
   session.socket.on("session:invalid", leaveSession);
   session.socket.on("lobby:left", () => leaveSession());
   session.socket.io.on("reconnect_attempt", () => toast("Verbindung unterbrochen – versuche wieder beizutreten…"));
@@ -97,6 +109,9 @@ function leaveSession() {
   sessionStorage.removeItem("ss_player");
   if (session.socket) session.socket.disconnect();
   session.socket = null;
+  session.remotePreview = null;
+  session.blindFadeStartedAt = null;
+  cancelAnimationFrame(session.blindFadeFrame);
   $("#app").classList.remove("game-active");
   $(".brand").classList.remove("hidden");
   $("#game").classList.add("hidden");
@@ -248,14 +263,21 @@ function canvasView(room) {
   const isDrawer = room.drawerId === room.me;
   const drawer = room.players.find((player) => player.id === room.drawerId);
   const constraint = room.constraint;
-  if (constraint && !constraint.tools.includes(session.tool)) session.tool = constraint.tools[0];
+  const toolUsage = room.drawingUsage || {};
+  const availableTools = (constraint?.tools || []).filter((tool) => {
+    const limit = constraint.limits?.[tool];
+    return limit === undefined || (toolUsage[tool] || 0) < limit;
+  });
+  if (constraint && (!availableTools.includes(session.tool) || constraint.tools.length === 0)) {
+    session.tool = availableTools[0] || constraint.tools[0] || "pen";
+  }
   const tools = [
     { id: "pen", icon: "✎", label: "Freihand" },
     { id: "line", icon: "╱", label: "Linie" },
     { id: "ellipse", icon: "○", label: "Ellipse" },
     { id: "rectangle", icon: "□", label: "Rechteck" }
   ];
-  const usage = room.drawingUsage || {};
+  const usage = toolUsage;
   const toolHtml = isDrawer && constraint ? tools.filter((tool) => constraint.tools.includes(tool.id)).map((tool) => {
     const limit = constraint.limits?.[tool.id];
     const remaining = limit === undefined ? null : Math.max(0, limit - (usage[tool.id] || 0));
@@ -418,6 +440,10 @@ function setupCanvas() {
   if (session.room.constraint?.fixedColor) session.color = session.room.constraint.fixedColor;
   else if (session.room.constraint?.singleColor && session.room.drawing.length) session.color = session.room.drawing[0].color;
   resizeCanvas();
+  if (session.room.constraint?.hideExisting && session.room.drawing.length && !session.blindFadeStartedAt) {
+    session.blindFadeStartedAt = performance.now() - 6000;
+  }
+  runBlindFade();
   redraw();
   if (session.room.drawerId !== session.room.me) return;
   $$("[data-tool]").forEach((button) => button.addEventListener("click", () => {
@@ -455,9 +481,9 @@ function redraw() {
   session.context.clearRect(0, 0, rect.width, rect.height);
   session.context.fillStyle = "#fff";
   session.context.fillRect(0, 0, rect.width, rect.height);
-  const hideExisting = session.room.drawerId === session.room.me && session.room.constraint?.hideExisting;
-  if (!hideExisting) {
-    for (const stroke of session.room.drawing || []) drawShape(stroke, rect);
+  for (const stroke of session.room.drawing || []) drawShape(stroke, rect);
+  if (session.remotePreview && session.remotePreview.roundId === session.room.roundId) {
+    drawShape(session.remotePreview, rect);
   }
   if (session.drawing && session.points.length) {
     const preview = {
@@ -534,10 +560,12 @@ function pointerDown(event) {
   if (session.room.drawerId !== session.room.me || session.room.phase !== "drawing") return;
   session.canvas.setPointerCapture(event.pointerId);
   session.drawing = true;
+  startBlindFade();
   const point = pointerPoint(event);
   session.points = [point];
   session.draftFrom = point;
   session.draftTo = point;
+  emitDrawingPreview(true);
   redraw();
 }
 
@@ -548,6 +576,7 @@ function pointerMove(event) {
   if (session.tool === "pen") {
     appendPenPoint(session.points, point);
   }
+  emitDrawingPreview();
   redraw();
 }
 
@@ -577,6 +606,7 @@ function pointerUp() {
   session.points = [];
   session.draftFrom = null;
   session.draftTo = null;
+  session.socket.emit("drawing:preview", { roundId: session.roundId, clear: true });
   session.socket.emit("drawing:mark", mark);
 }
 
@@ -585,7 +615,55 @@ function cancelPointer() {
   session.points = [];
   session.draftFrom = null;
   session.draftTo = null;
+  session.socket.emit("drawing:preview", { roundId: session.roundId, clear: true });
   redraw();
+}
+
+function emitDrawingPreview(force = false) {
+  if (!session.socket || !session.drawing) return;
+  const now = performance.now();
+  if (!force && now - session.lastPreviewAt < 50) return;
+  session.lastPreviewAt = now;
+  session.socket.emit("drawing:preview", {
+    roundId: session.roundId,
+    type: session.tool,
+    color: session.color,
+    width: session.width,
+    points: session.tool === "pen" ? samplePreviewPoints(session.points) : undefined,
+    from: session.tool === "pen" ? undefined : session.draftFrom,
+    to: session.tool === "pen" ? undefined : session.draftTo
+  });
+}
+
+function samplePreviewPoints(points) {
+  if (points.length <= 600) return points;
+  const stride = (points.length - 1) / 599;
+  return Array.from({ length: 600 }, (_, index) => points[Math.round(index * stride)]);
+}
+
+function startBlindFade() {
+  if (!session.room?.constraint?.hideExisting || session.room.drawerId !== session.playerId) return;
+  if (!session.blindFadeStartedAt) session.blindFadeStartedAt = performance.now();
+  runBlindFade();
+}
+
+function runBlindFade() {
+  cancelAnimationFrame(session.blindFadeFrame);
+  const tick = () => {
+    if (!session.canvas) return;
+    const blind = session.room?.constraint?.hideExisting && session.room.drawerId === session.playerId;
+    if (!blind || !session.blindFadeStartedAt) {
+      session.canvas.style.opacity = "1";
+      return;
+    }
+    const elapsed = performance.now() - session.blindFadeStartedAt;
+    const opacity = elapsed <= 3000
+      ? 1
+      : Math.max(0, 1 - (elapsed - 3000) / 3000);
+    session.canvas.style.opacity = String(opacity);
+    if (opacity > 0) session.blindFadeFrame = requestAnimationFrame(tick);
+  };
+  tick();
 }
 
 $$("[data-tab]").forEach((button) => button.addEventListener("click", () => {
