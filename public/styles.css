@@ -347,10 +347,15 @@ legend span { color: var(--line); text-transform: uppercase; letter-spacing: .1e
 .watching-badge span { color: var(--green); margin-right: 8px; font-weight: 900; }
 
 .handicap-list { display: grid; gap: 8px; margin-top: 16px; padding-top: 15px; border-top: 1px solid #ffffff1c; }
-.handicap-item { display: grid; grid-template-columns: 38px 1fr; align-items: center; gap: 10px; padding: 9px; border: 1px solid #ffffff15; border-radius: 10px; background: #1117207a; }
-.handicap-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: #ffb3471c; color: var(--accent); font-size: 22px; }
-.handicap-item strong { display: block; color: var(--text); font-size: 12px; }
-.handicap-item small { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; line-height: 1.35; }
+.handicap-item { display: grid; grid-template-columns: 32px auto 1fr; align-items: center; gap: 7px; min-height: 48px; padding: 7px 10px; border: 1px solid #ffffff15; border-radius: 10px; background: #1117207a; }
+.handicap-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: #ffb3471c; color: var(--accent); font-size: 20px; }
+.handicap-item strong { color: var(--text); font-size: 19px; font-variant-numeric: tabular-nums; }
+.handicap-item small { color: var(--muted); font-size: 10px; line-height: 1.2; }
+.handicap-item.yes strong { color: var(--green); }
+.handicap-item.no strong { color: var(--danger); }
+.handicap-item.black .handicap-icon { color: #0b0b0b; background: #eee; }
+.context-sidebar h3 { font-size: 24px; margin: 7px 0 10px; }
+.context-sidebar p { color: var(--muted); font-size: 11px; line-height: 1.6; }
 .phase-drawing .mission-sidebar { grid-area: mission; max-height: calc(100vh - 112px); overflow: auto; }
 .phase-drawing .mission-sidebar .secret-card { margin-bottom: 12px; }
 .phase-drawing .mission-sidebar .secret-word { font-size: clamp(27px, 2.5vw, 40px); }

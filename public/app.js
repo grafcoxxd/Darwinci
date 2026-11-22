@@ -151,7 +151,7 @@ function renderPlayerList(room) {
       <div class="avatar" style="background:${player.character.color}24">${player.character.icon}</div>
       <div class="player-info">
         <div class="player-name">${escapeHtml(player.name)} ${player.id === room.hostId ? '<span class="crown">♛</span>' : ""}</div>
-        <div class="player-detail">${!player.alive ? "Ausgeschieden" : player.sittingOut ? "Setzt aus" : player.id === room.drawerId ? "Zeichnet gerade"         : player.left ? "Verlassen" : player.connected ? (room.phase === "gameover" && player.role ? player.role === "saboteur" ? "Saboteur" : "Gut" : "Bereit") : "Getrennt · kehrt zurück"}</div>
+        <div class="player-detail">${!player.alive ? "Ausgeschieden" : player.sittingOut ? "Setzt aus" : player.id === room.drawerId ? "Zeichnet gerade"         : player.left ? "Verlassen" : player.connected ? (room.phase === "gameover" && player.role ? player.role === "saboteur" ? "Agent" : "Crew" : "Bereit") : "Getrennt · kehrt zurück"}</div>
       </div>
       <span class="status-dot ${player.connected ? "" : "offline"}"></span>
     </div>`).join("")}</div>`;
@@ -161,7 +161,7 @@ function renderSettings(room) {
   const s = room.settings;
   const isHost = room.hostId === room.me;
   return `<form id="settings-form" class="settings-grid">
-    <label class="setting-row">Saboteure<select name="saboteurCount" ${!isHost ? "disabled" : ""}>${[1, 2, 3].map(n => `<option value="${n}" ${s.saboteurCount === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+    <label class="setting-row">Agenten<select name="saboteurCount" ${!isHost ? "disabled" : ""}>${[1, 2, 3].map(n => `<option value="${n}" ${s.saboteurCount === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>
     <label class="setting-row">Zeichenzeit<select name="drawTime" ${!isHost ? "disabled" : ""}>${[30, 45, 60, 90, 120].map(n => `<option value="${n}" ${s.drawTime === n ? "selected" : ""}>${n} Sekunden</option>`).join("")}</select></label>
     <label class="setting-row">Einschränkungen<select name="difficulty" ${!isHost ? "disabled" : ""}>
       <option value="easy" ${s.difficulty === "easy" ? "selected" : ""}>Sanft</option><option value="medium" ${s.difficulty === "medium" ? "selected" : ""}>Mittel</option><option value="hard" ${s.difficulty === "hard" ? "selected" : ""}>Fies</option>
@@ -185,7 +185,7 @@ function lobbyView(room) {
   const isHost = room.hostId === room.me;
   const maxSaboteurs = room.players.length < 3 ? 0 : Math.floor((room.players.length - 1) / 2);
   const warnings = room.settings.saboteurCount > maxSaboteurs
-    ? `${room.players.length < 3 ? "Testmodus" : "Hinweis"}: Es werden ${maxSaboteurs} Saboteure verteilt.`
+    ? `${room.players.length < 3 ? "Testmodus" : "Hinweis"}: Es werden ${maxSaboteurs} Agenten verteilt.`
     : "Alle bereit für den Start";
   return `
     <aside class="sidebar lobby-players panel"><div class="sidebar-heading"><div><span class="eyebrow">RAUMBELEGUNG</span><h3>Spieler</h3></div><strong class="count-badge">${room.players.length}/12</strong></div>${renderPlayerList(room)}</aside>
@@ -211,8 +211,8 @@ function rolePanel(room) {
   const evil = room.myRole === "saboteur";
   return `<div class="role-card ${evil ? "saboteur" : "good"}">
     <span class="eyebrow">${evil ? "GEHEIME ROLLE" : "DEINE ROLLE"}</span>
-    <h3>${evil ? "🕶 Saboteur" : "✦ Gut"}</h3>
-    <p>${evil ? "Du kennst das Wort. Sorge glaubwürdig dafür, dass die Gruppe falsch liegt." : "Arbeite mit den Guten zusammen und enttarne die Saboteure."}</p>
+    <h3>${evil ? "🕶 Agent" : "✦ Crew"}</h3>
+    <p>${evil ? "Du kennst das Wort. Sorge glaubwürdig dafür, dass die Gruppe falsch liegt." : "Arbeite mit der Crew zusammen und enttarne die Agenten."}</p>
     ${!me.alive ? '<p class="danger-text">Du bist ausgeschieden, kannst aber weiter zusehen.</p>' : me.sittingOut ? '<p class="danger-text">Du setzt diese Runde aus.</p>' : ""}
   </div>`;
 }
@@ -221,25 +221,25 @@ function handicapRows(constraint) {
   if (!constraint) return [];
   const rows = [];
   const icons = { pen: "✎", line: "╱", ellipse: "◯", rectangle: "▭" };
-  const labels = { pen: "Freihandstrich", line: "gerade Linie", ellipse: "Ellipse", rectangle: "Rechteck" };
+  const labels = { pen: "Strich", line: "Linien", ellipse: "Ellipsen", rectangle: "Rechtecke" };
   if (constraint.limits) {
     for (const [tool, limit] of Object.entries(constraint.limits)) {
-      rows.push({ icon: icons[tool] || "⌗", title: `Max. ${limit}×`, text: labels[tool] || tool });
+      rows.push({ icon: icons[tool] || "⌗", value: limit, text: labels[tool] || tool });
     }
   } else if (constraint.maxItems) {
-    rows.push({ icon: "⌗", title: `${constraint.maxItems} Formen`, text: "nur die erlaubten Werkzeuge" });
+    rows.push({ icon: "⌗", value: constraint.maxItems, text: "Formen" });
   }
   if (constraint.timeFactor) {
-    rows.push({ icon: "⏱", title: `${Math.round(constraint.timeFactor * 100)} % Zeit`, text: "Zeichenphase verkürzt" });
+    rows.push({ icon: "⏱", value: `${Math.round(constraint.timeFactor * 100)}%`, text: "Zeit" });
   }
-  if (constraint.mirrorX) rows.push({ icon: "⇄", title: "Gespiegelt", text: "deine Eingabe wird horizontal invertiert" });
-  if (constraint.hideExisting) rows.push({ icon: "◉", title: "Blind", text: "bereits Gezeichnetes bleibt verborgen" });
+  if (constraint.mirrorX) rows.push({ icon: "⇄", value: "AN", text: "gespiegelt" });
+  if (constraint.hideExisting) rows.push({ icon: "◉", value: "AN", text: "blind" });
   if (constraint.singleColor || constraint.fixedColor) {
-    rows.push({ icon: "●", title: constraint.fixedColor ? "Nur Schwarz" : "Eine Farbe", text: "Farbwechsel nicht erlaubt" });
+    rows.push({ icon: "●", value: constraint.fixedColor ? "1" : "1", text: constraint.fixedColor ? "Schwarz" : "Farbe", black: Boolean(constraint.fixedColor) });
   }
-  if (constraint.allowUndo === false) rows.push({ icon: "↶", title: "Kein Rückgängig", text: "jede Aktion ist verbindlich" });
+  rows.push({ icon: "↶", value: constraint.allowUndo === false ? "×" : "✓", text: "Rückgängig", status: constraint.allowUndo === false ? "no" : "yes" });
   if (constraint.allowClear === false && constraint.allowUndo !== false) {
-    rows.push({ icon: "⌫", title: "Nicht leeren", text: "die Leinwand bleibt bestehen" });
+    rows.push({ icon: "⌫", value: "×", text: "Leeren", status: "no" });
   }
   return rows;
 }
@@ -266,7 +266,7 @@ function canvasView(room) {
   }).join("") : "";
   const color = constraint?.fixedColor || session.color;
   const handicaps = handicapRows(constraint);
-  const secret = room.word ? `<div class="role-card secret-card"><span class="eyebrow">${isDrawer ? "GEHEIMES WORT" : "DEIN WISSEN"}</span><div class="secret-word">${escapeHtml(room.word)}</div>${isDrawer ? `<div class="handicap-list">${handicaps.map((item) => `<div class="handicap-item"><span class="handicap-icon">${item.icon}</span><div><strong>${item.title}</strong><small>${item.text}</small></div></div>`).join("")}</div>` : ""}</div>` : "";
+  const secret = room.word ? `<div class="role-card secret-card"><span class="eyebrow">${isDrawer ? "GEHEIMES WORT" : "DEIN WISSEN"}</span><div class="secret-word">${escapeHtml(room.word)}</div>${isDrawer ? `<div class="handicap-list">${handicaps.map((item) => `<div class="handicap-item ${item.status || ""} ${item.black ? "black" : ""}"><span class="handicap-icon">${item.icon}</span><strong>${item.value}</strong><small>${item.text}</small></div>`).join("")}</div>` : ""}</div>` : "";
   return `<section class="main-stage canvas-stage panel">
     <div class="canvas-wrap"><canvas id="drawing-canvas" class="${isDrawer ? "" : "canvas-disabled"}"></canvas>
       <div class="canvas-caption"><span class="eyebrow">RUNDE ${room.round}</span><strong>${isDrawer ? "Du zeichnest" : `${escapeHtml(drawer?.name || "Jemand")} zeichnet`}</strong></div>
@@ -291,7 +291,7 @@ function guessingView(room) {
       ${room.canGuess ? `<form id="guess-form"><input id="guess-input" maxlength="50" value="${escapeHtml(session.guessDraft)}" placeholder="Euer endgültiges Lösungswort" autocomplete="off" required><button class="primary">Einloggen →</button></form>` : '<p class="hint">Wartet auf die gemeinsame Lösung.</p>'}
       <p class="decision-note">Jede aktive Person außer dem Zeichner kann den abgestimmten Begriff einloggen.</p>
     </div>
-  </section><aside class="sidebar mission-sidebar panel"><div class="sidebar-heading"><div><span class="eyebrow">DEINE MISSION</span><h3>Geheime Infos</h3></div></div>${rolePanel(room)}</aside>`;
+  </section><aside class="sidebar mission-sidebar panel context-sidebar"><span class="eyebrow">NÄCHSTER SCHRITT</span><h3>Gemeinsam festlegen</h3><p>Eine Person trägt die endgültige Lösung ein. Danach folgt direkt die Abstimmung.</p></aside>`;
 }
 
 function votingView(room) {
@@ -300,9 +300,9 @@ function votingView(room) {
     <span class="eyebrow">EURE EINGELOGGTE LÖSUNG</span><div class="locked-guess">„${escapeHtml(room.guess)}“</div>
     <h2>Wen haltet ihr für verdächtig?</h2><p class="result-copy">Wählt eine Person. Eure Stimmen bleiben bis zur Auswertung verdeckt.</p>
     <div class="vote-grid">${eligible.map((player) => `<button class="vote-player" data-vote="${player.id}" ${room.hasVoted ? "disabled" : ""}>
-      <div class="avatar" style="background:${player.character.color}24">${player.character.icon}</div><div><strong>${escapeHtml(player.name)}</strong><span>Als Saboteur verdächtigen</span></div></button>`).join("")}</div>
+      <div class="avatar" style="background:${player.character.color}24">${player.character.icon}</div><div><strong>${escapeHtml(player.name)}</strong><span>Als Agent verdächtigen</span></div></button>`).join("")}</div>
     <div class="vote-progress"><strong>${room.votesCast} / ${room.activeVoters}</strong> Stimmen abgegeben${room.hasVoted ? " · Deine Stimme ist gespeichert" : ""}</div>
-  </div></section><aside class="sidebar mission-sidebar panel"><div class="sidebar-heading"><div><span class="eyebrow">DEINE MISSION</span><h3>Geheime Infos</h3></div></div>${rolePanel(room)}<p class="hint">Erst wenn alle abgestimmt haben, wird ausgewertet.</p></aside>`;
+  </div></section><aside class="sidebar mission-sidebar panel context-sidebar"><span class="eyebrow">ABSTIMMUNG</span><h3>Wer ist Agent?</h3><p>Deine Auswahl bleibt verborgen, bis alle aktiven Spieler abgestimmt haben.</p></aside>`;
 }
 
 function resultView(room) {
@@ -311,7 +311,7 @@ function resultView(room) {
     <div class="big-icon">${result.tie ? "🤝" : "🚪"}</div>
     <span class="eyebrow">RUNDE ${room.round} BEENDET</span>
     <h2>${result.ejectedName ? `${escapeHtml(result.ejectedName)} verlässt die Runde` : "Unentschieden"}</h2>
-    <p class="result-copy">${result.tie ? "Gleichstand: Niemand wurde entfernt." : room.settings.eliminationMode === "sitout" ? "Dieser Spieler setzt die nächste Runde aus." : "Ist damit ein Saboteur enttarnt?"}</p>
+    <p class="result-copy">${result.tie ? "Gleichstand: Niemand wurde entfernt." : room.settings.eliminationMode === "sitout" ? "Dieser Spieler setzt die nächste Runde aus." : "Ist damit ein Agent enttarnt?"}</p>
     <div class="result-cards">
       <div class="result-card"><span>Eure Lösung</span><strong>${escapeHtml(result.guess)}</strong></div>
       <div class="result-card"><span>Das Wort war</span><strong>${result.word ? escapeHtml(result.word) : "noch geheim"}</strong></div>
@@ -326,7 +326,7 @@ function gameoverView(room) {
   const goodWon = result.winner === "good";
   return `<section class="main-stage panel"><div class="result">
     <div class="big-icon">${goodWon ? "🏆" : "🕶️"}</div><span class="eyebrow">SPIEL BEENDET</span>
-    <h2>${goodWon ? "Die Guten haben gewonnen!" : "Die Saboteure gewinnen!"}</h2>
+    <h2>${goodWon ? "Die Crew gewinnt!" : "Die Agenten gewinnen!"}</h2>
     <p class="result-copy">Nach ${room.round} Runden und ${room.score} von ${room.targetScore} richtigen Wörtern stehen die geheimen Rollen fest.</p>
     <div class="reveal-list">${room.pendingReveal.map(item => `<div class="reveal-row"><span>Runde ${item.round}: <strong>${escapeHtml(item.word)}</strong></span><span class="${item.correct ? "success-text" : "danger-text"}">${item.correct ? "✓ richtig" : `✕ ${escapeHtml(item.guess)}`}</span></div>`).join("")}</div>
     ${room.hostId === room.me ? '<button id="reset-game" class="primary">Zurück in die Lobby <span>→</span></button>' : '<p class="hint">Der Host öffnet gleich die Lobby.</p>'}
@@ -347,13 +347,13 @@ function renderGame() {
   $("#app").classList.add("game-active");
   $(".brand").classList.add("hidden");
   const revealRole = room.phase === "drawing" && !sessionStorage.getItem(`ss_role_${room.code}`);
-  const roleBadge = room.phase === "lobby" ? "" : `<div class="role-badge ${room.myRole === "saboteur" ? "saboteur" : "good"}"><span>${room.myRole === "saboteur" ? "🕶" : "✦"}</span><div><small>DEINE ROLLE</small><strong>${room.myRole === "saboteur" ? "Saboteur" : "Gut"}</strong></div></div>`;
+  const roleBadge = room.phase === "lobby" ? "" : `<div class="role-badge ${room.myRole === "saboteur" ? "saboteur" : "good"}"><span>${room.myRole === "saboteur" ? "🕶" : "✦"}</span><div><small>DEINE ROLLE</small><strong>${room.myRole === "saboteur" ? "Agent" : "Crew"}</strong></div></div>`;
   $("#game").innerHTML = `<div class="game-shell phase-${room.phase}">
     <header class="game-header panel"><div class="game-brand"><span class="brand-mark">✦</span><div><strong>Darwinci</strong><button data-copy-code class="inline-code">LOBBY ${room.code}</button></div></div>
       <div class="main-timer ${room.phase === "drawing" ? "urgent" : ""}" id="phase-timer"><span>${phaseText(room.phase)} · ${room.round ? `Runde ${room.round}` : "Wartebereich"}</span><strong>${formatTime(room.deadline)}</strong></div>
       <div class="header-actions"><div class="goal-stat"><span>ZIEL</span><strong>${room.score === null ? "?" : room.score}/${room.targetScore}</strong></div>${roleBadge}<button id="leave-room" class="secondary compact" aria-label="Lobby verlassen">Verlassen</button></div>
     </header>
-    ${revealRole ? `<div class="role-reveal ${room.myRole === "saboteur" ? "saboteur" : "good"}"><span>${room.myRole === "saboteur" ? "🕶" : "✦"}</span><small>DEINE GEHEIME ROLLE</small><strong>${room.myRole === "saboteur" ? "Saboteur" : "Gut"}</strong><p>${room.myRole === "saboteur" ? "Sorge dafür, dass die Gruppe das falsche Wort einloggt." : "Ratet richtig und entlarvt die Saboteure."}</p></div>` : ""}
+    ${revealRole ? `<div class="role-reveal ${room.myRole === "saboteur" ? "saboteur" : "good"}"><span>${room.myRole === "saboteur" ? "🕶" : "✦"}</span><small>DEINE GEHEIME ROLLE</small><strong>${room.myRole === "saboteur" ? "Agent" : "Crew"}</strong><p>${room.myRole === "saboteur" ? "Sorge dafür, dass die Gruppe das falsche Wort einloggt." : "Ratet richtig und entlarvt die Agenten."}</p></div>` : ""}
     ${room.phase !== "lobby" && room.phase !== "gameover" ? `<aside class="sidebar panel"><h3>Spieler · ${room.players.filter(p => p.alive).length} aktiv</h3>${renderPlayerList(room)}</aside>` : ""}
     ${stage}
   </div>`;
