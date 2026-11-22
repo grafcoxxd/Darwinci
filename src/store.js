@@ -52,11 +52,19 @@ async function saveRoom(room) {
 }
 
 async function listRooms() {
-  if (!pool) return [...memoryRooms.values()].map(structuredClone);
+  if (!pool) return [...memoryRooms.values()].map((room) => structuredClone(room));
   const result = await pool.query(
     "SELECT state FROM game_rooms WHERE updated_at > NOW() - INTERVAL '7 days'"
   );
   return result.rows.map((row) => row.state);
+}
+
+async function deleteRoom(code) {
+  if (!pool) {
+    memoryRooms.delete(code);
+    return;
+  }
+  await pool.query("DELETE FROM game_rooms WHERE code = $1", [code]);
 }
 
 async function withRoom(code, operation) {
@@ -93,4 +101,4 @@ async function closeStore() {
   if (pool) await pool.end();
 }
 
-module.exports = { closeStore, getRoom, initStore, listRooms, saveRoom, withRoom };
+module.exports = { closeStore, deleteRoom, getRoom, initStore, listRooms, saveRoom, withRoom };

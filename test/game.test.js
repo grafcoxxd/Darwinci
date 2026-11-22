@@ -99,6 +99,16 @@ test("lets lobby players leave and transfers host ownership", () => {
   assert.ok(room.players.every((player) => player.id !== oldHost));
 });
 
+test("allows leaving an active game and transfers host ownership", () => {
+  const room = createReadyRoom();
+  game.startGame(room);
+  const nextHost = room.players[1].id;
+  game.leaveRoom(room, room.hostId);
+
+  assert.equal(room.hostId, nextHost);
+  assert.equal(room.players.length, 3);
+});
+
 test("keeps the target score fixed and hidden with delayed reveals", () => {
   const room = createReadyRoom();
   room.settings.revealTiming = "end";
@@ -137,4 +147,14 @@ test("supports a single-player test round", () => {
 
   assert.equal(room.phase, "gameover");
   assert.equal(room.game.lastResult.winner, "good");
+});
+
+test("lets disconnected players resume with their original name", () => {
+  const room = createReadyRoom();
+  game.startGame(room);
+  const player = room.players[1];
+  player.connected = false;
+
+  assert.equal(game.addPlayer(room, player.name, "ghost"), player.id);
+  assert.equal(room.players.length, 4);
 });

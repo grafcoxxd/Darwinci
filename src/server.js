@@ -155,7 +155,11 @@ io.on("connection", (socket) => {
       game.leaveRoom(state, session.playerId);
     });
     activeSockets.delete(socket.id);
-    broadcastRoom(room);
+    if (room.players.length === 0) {
+      await store.deleteRoom(room.code);
+    } else {
+      broadcastRoom(room);
+    }
     socket.emit("lobby:left", { code: room.code });
     socket.leave(room.code);
   }));
@@ -245,7 +249,11 @@ io.on("connection", (socket) => {
         const player = state.players.find((item) => item.id === session.playerId);
         if (player) player.connected = false;
       });
-      broadcastRoom(room);
+      if (room.phase === "lobby" && room.players.every((player) => !player.connected)) {
+        await store.deleteRoom(room.code);
+      } else {
+        broadcastRoom(room);
+      }
     } catch (error) {
       console.error("Fehler beim Abmelden:", error.message);
     }
@@ -255,6 +263,14 @@ io.on("connection", (socket) => {
 setInterval(async () => {
   if (tickingRooms.size) return;
   for (const room of await store.listRooms()) {
+    if (
+      room.phase === "lobby" &&
+      room.players.every((player) => !player.connected) &&
+      Date.now() - room.updatedAt > 60_000
+    ) {
+      await store.deleteRoom(room.code);
+      continue;
+    }
     if (!["drawing", "guessing", "voting", "result"].includes(room.phase)) continue;
     tickingRooms.add(room.code);
     try {

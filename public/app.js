@@ -1,8 +1,8 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const session = {
-  code: localStorage.getItem("ss_code") || "",
-  playerId: localStorage.getItem("ss_player") || "",
+  code: sessionStorage.getItem("ss_code") || "",
+  playerId: sessionStorage.getItem("ss_player") || "",
   character: localStorage.getItem("ss_character") || "fox",
   socket: null,
   room: null,
@@ -79,8 +79,8 @@ function leaveSession() {
   session.code = "";
   session.playerId = "";
   session.room = null;
-  localStorage.removeItem("ss_code");
-  localStorage.removeItem("ss_player");
+  sessionStorage.removeItem("ss_code");
+  sessionStorage.removeItem("ss_player");
   if (session.socket) session.socket.disconnect();
   session.socket = null;
   $("#game").classList.add("hidden");
@@ -106,8 +106,8 @@ async function enterLobby(event) {
     if (!response.ok) throw new Error(result.error || "Lobby konnte nicht geöffnet werden.");
     session.code = result.code;
     session.playerId = result.playerId;
-    localStorage.setItem("ss_code", result.code);
-    localStorage.setItem("ss_player", result.playerId);
+    sessionStorage.setItem("ss_code", result.code);
+    sessionStorage.setItem("ss_player", result.playerId);
     connect();
   } catch (error) {
     toast(error.message);
@@ -135,7 +135,7 @@ function renderPlayerList(room) {
       <div class="avatar" style="background:${player.character.color}24">${player.character.icon}</div>
       <div class="player-info">
         <div class="player-name">${escapeHtml(player.name)} ${player.id === room.hostId ? '<span class="crown">♛</span>' : ""}</div>
-        <div class="player-detail">${!player.alive ? "Ausgeschieden" : player.sittingOut ? "Setzt aus" : player.id === room.drawerId ? "Zeichnet gerade" : player.connected ? (room.phase === "gameover" && player.role ? player.role === "saboteur" ? "Saboteur" : "Gut" : "Bereit") : "Getrennt · kehrt zurück"}</div>
+        <div class="player-detail">${!player.alive ? "Ausgeschieden" : player.sittingOut ? "Setzt aus" : player.id === room.drawerId ? "Zeichnet gerade"         : player.left ? "Verlassen" : player.connected ? (room.phase === "gameover" && player.role ? player.role === "saboteur" ? "Saboteur" : "Gut" : "Bereit") : "Getrennt · kehrt zurück"}</div>
       </div>
       <span class="status-dot ${player.connected ? "" : "offline"}"></span>
     </div>`).join("")}</div>`;
@@ -178,7 +178,6 @@ function lobbyView(room) {
         </div>
         <p class="${room.settings.saboteurCount > maxSaboteurs ? "danger-text" : "success-text"}">${warnings}</p>
         ${isHost ? '<button id="start-game" class="primary">Spiel starten <span>→</span></button>' : '<p class="hint">Der Host startet das Spiel.</p>'}
-        <button id="leave-lobby" class="secondary leave-lobby" type="button">Lobby verlassen</button>
       </div>
     </section>
     <aside class="sidebar panel"><h3>Lobby-Regeln</h3>${renderSettings(room)}
@@ -275,7 +274,7 @@ function renderGame() {
   $("#game").innerHTML = `<div class="game-shell">
     <header class="game-header panel"><div><h2>Darwinci</h2><div class="lobby-code">LOBBY ${room.code}</div></div>
       <div class="phase-pill"><strong>${phaseText(room.phase)}</strong> ${room.round ? `· Runde ${room.round}` : ""}</div>
-      <div class="timer" id="phase-timer">${formatTime(room.deadline)}</div>
+      <div class="header-actions"><div class="timer" id="phase-timer">${formatTime(room.deadline)}</div><button id="leave-room" class="secondary compact">Verlassen</button></div>
     </header>
     ${room.phase !== "lobby" && room.phase !== "gameover" ? `<aside class="sidebar panel"><h3>Spieler · ${room.players.filter(p => p.alive).length} aktiv</h3>${renderPlayerList(room)}</aside>` : ""}
     ${stage}
@@ -287,7 +286,8 @@ function renderGame() {
 function bindGameControls() {
   const room = session.room;
   $("#start-game")?.addEventListener("click", () => session.socket.emit("game:start"));
-  $("#leave-lobby")?.addEventListener("click", () => {
+  $("#leave-room")?.addEventListener("click", () => {
+    if (room.phase !== "lobby" && !confirm("Das laufende Spiel wirklich verlassen? Du wirst als ausgeschieden gewertet.")) return;
     session.socket.emit("lobby:leave");
   });
   $("#settings-form")?.addEventListener("change", (event) => {

@@ -80,7 +80,7 @@ function sanitizeSettings(input = {}, current = {}) {
   settings.winMode = input.winMode === "rounds" ? "rounds" : "score";
   settings.targetScore = clampInt(input.targetScore, 1, 20, current.targetScore ?? 4);
   settings.targetScoreCustom = Boolean(current.targetScoreCustom) ||
-    Number(input.targetScore) !== Number(current.targetScore ?? settings.targetScore);
+    (input.targetScore !== undefined && Number(input.targetScore) !== Number(current.targetScore ?? settings.targetScore));
   settings.maxRounds = clampInt(input.maxRounds, 1, 30, 8);
   return settings;
 }
@@ -125,7 +125,7 @@ function newPlayer(id, name, character) {
     id,
     name: normalizeName(name),
     character: CHARACTERS.some((item) => item.id === character) ? character : "fox",
-    connected: true,
+    connected: false,
     role: null,
     alive: true,
     sittingOut: false,
@@ -134,10 +134,19 @@ function newPlayer(id, name, character) {
 }
 
 function addPlayer(room, name, character) {
-  if (room.phase !== "lobby") throw new Error("Das Spiel hat bereits begonnen.");
-  if (room.players.length >= 12) throw new Error("Diese Lobby ist voll.");
   const cleanName = normalizeName(name);
   if (!cleanName) throw new Error("Bitte einen Namen eingeben.");
+  const returningPlayer = room.players.find((player) =>
+    player.name.toLowerCase() === cleanName.toLowerCase() && !player.connected
+  );
+  if (returningPlayer) {
+    if (CHARACTERS.some((item) => item.id === character)) returningPlayer.character = character;
+    return returningPlayer.id;
+  }
+  if (room.phase !== "lobby") {
+    throw new Error("Das Spiel hat bereits begonnen. Mit demselben Namen kann nur eine getrennte Person wieder beitreten.");
+  }
+  if (room.players.length >= 12) throw new Error("Diese Lobby ist voll.");
   if (room.players.some((player) => player.name.toLowerCase() === cleanName.toLowerCase())) {
     throw new Error("Dieser Name ist in der Lobby schon vergeben.");
   }
@@ -149,12 +158,38 @@ function addPlayer(room, name, character) {
 }
 
 function leaveRoom(room, playerId) {
-  if (room.phase !== "lobby") throw new Error("Während eines laufenden Spiels ist ein Verlassen nicht möglich.");
   const index = room.players.findIndex((player) => player.id === playerId);
   if (index === -1) throw new Error("Spieler wurde in der Lobby nicht gefunden.");
-  room.players.splice(index, 1);
-  if (room.hostId === playerId) room.hostId = room.players[0]?.id || null;
+  const [player] = room.players.splice(index, 1);
+  Object.entries(room.game.votes).forEach(([voterId, targetId]) => {
+    if (voterId === playerId || targetId === playerId) delete room.game.votes[voterId];
+  });
+  if (room.hostId === playerId) {
+    room.hostId = room.players.find((item) => item.id !== playerId && item.connected && item.alive)?.id ||
+      room.players.find((item) => item.id !== playerId)?.id || null;
+  }
   if (!room.settings.targetScoreCustom) room.settings.targetScore = targetScoreFor(room.players.length);
+
+  if (room.phase !== "lobby") {
+    if (room.players.length === 0) return;
+    if (room.game.drawerId === playerId && room.phase === "drawing") finishDrawing(room);
+    const winner = determineWinner(room);
+    if (winner) {
+      room.phase = "gameover";
+      room.game.deadline = null;
+      room.game.lastResult = {
+        round: room.round,
+        guess: room.game.guess,
+        correct: room.game.correct,
+        word: room.game.word,
+        winner,
+        ejectedId: playerId,
+        ejectedName: player.name,
+        revealWord: true,
+        tie: false
+      };
+    }
+  }
 }
 
 function targetScoreFor(playerCount) {
@@ -380,7 +415,8 @@ function publicState(room, viewerId) {
       connected: player.connected,
       alive: player.alive,
       sittingOut: player.sittingOut,
-      role: room.phase === "gameover" || player.id === viewerId ? player.role : null
+      role: room.phase === "gameover" || player.id === viewerId ? player.role : null,
+      left: !player.connected && !player.alive
     })),
     me: viewerId,
     myRole: viewer.role,
