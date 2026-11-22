@@ -384,9 +384,20 @@ function redraw() {
   session.context.clearRect(0, 0, rect.width, rect.height);
   session.context.fillStyle = "#fff";
   session.context.fillRect(0, 0, rect.width, rect.height);
-  for (const stroke of session.room.drawing || []) drawShape(stroke, rect);
+  const hideExisting = session.room.drawerId === session.room.me && session.room.constraint?.hideExisting;
+  if (!hideExisting) {
+    for (const stroke of session.room.drawing || []) drawShape(stroke, rect);
+  }
   if (session.drawing && session.points.length) {
-    drawShape({ type: session.tool, color: session.color, width: session.width, points: session.points, from: session.draftFrom, to: session.draftTo }, rect);
+    const preview = {
+      type: session.tool,
+      color: session.color,
+      width: session.width,
+      points: session.points,
+      from: session.draftFrom,
+      to: session.draftTo
+    };
+    drawShape(mirrorPreview(preview), rect);
   }
 }
 
@@ -405,6 +416,17 @@ function drawShape(shape, rect) {
       context.arc(first.x * rect.width, first.y * rect.height, shape.width / 2, 0, Math.PI * 2);
       context.fill();
       return;
+    }
+
+    function mirrorPreview(shape) {
+      if (!session.room.constraint?.mirrorX) return shape;
+      const mirrorPoint = (point) => point && ({ ...point, x: 1 - point.x });
+      return {
+        ...shape,
+        points: shape.points?.map(mirrorPoint),
+        from: mirrorPoint(shape.from),
+        to: mirrorPoint(shape.to)
+      };
     }
     context.beginPath();
     context.moveTo(first.x * rect.width, first.y * rect.height);

@@ -109,6 +109,34 @@ test("rejects disallowed tools and correction controls", () => {
   );
 });
 
+test("random geometry restrictions distribute exactly five forms", () => {
+  const distributions = new Set();
+  const room = createReadyRoom();
+  for (let index = 0; index < 20; index += 1) {
+    room.settings.difficulty = "medium";
+    game.startRound(room);
+    if (room.game.constraint.kind === "random-geometry") {
+      const total = Object.values(room.game.constraint.limits).reduce((sum, value) => sum + value, 0);
+      assert.equal(total, 5);
+      distributions.add(Object.values(room.game.constraint.limits).join("-"));
+    }
+  }
+  assert.ok(distributions.size >= 1);
+});
+
+test("never assigns multi-lift stroke restrictions", () => {
+  const room = createReadyRoom();
+  room.settings.difficulty = "hard";
+  for (let index = 0; index < 30; index += 1) {
+    game.startRound(room);
+    if (room.game.constraint.tools.includes("pen")) {
+      assert.equal(room.game.constraint.limits.pen, 1);
+      assert.equal(room.game.constraint.allowUndo, false);
+      assert.equal(room.game.constraint.allowClear, false);
+    }
+  }
+});
+
 test("records one hidden vote result and reveals game roles at game over", () => {
   const room = createReadyRoom();
   game.startGame(room);

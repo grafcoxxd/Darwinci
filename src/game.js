@@ -48,21 +48,30 @@ const CONSTRAINTS = {
   easy: [
     { id: "mono-free", label: "Nur eine Farbe – sonst freie Hand", tools: ["pen", "line", "ellipse", "rectangle"], singleColor: true },
     { id: "eight-lines", label: "Maximal 8 gerade Linien", tools: ["line"], limits: { line: 8 } },
-    { id: "shapes-intro", label: "Nur Linien und Ellipsen, zusammen maximal 10", tools: ["line", "ellipse"], maxItems: 10 },
-    { id: "six-shapes", label: "Maximal 6 Formen", tools: ["pen", "line", "ellipse", "rectangle"], maxItems: 6 }
+    { id: "random-five-easy", kind: "random-geometry", tools: ["line", "ellipse", "rectangle"], maxItems: 5 },
+    { id: "six-shapes", label: "Maximal 6 Formen, keine freie Hand", tools: ["line", "ellipse", "rectangle"], maxItems: 6 }
   ],
   medium: [
-    { id: "four-strokes", label: "Maximal 4 freie Striche – danach nicht weiterzeichnen", tools: ["pen"], limits: { pen: 4 } },
     { id: "no-erase", label: "Freies Zeichnen, aber ohne Löschen oder Rückgängig", tools: ["pen", "line", "ellipse", "rectangle"], allowClear: false, allowUndo: false },
     { id: "three-line-two-ellipse", label: "Maximal 3 Linien und 2 Ellipsen", tools: ["line", "ellipse"], limits: { line: 3, ellipse: 2 } },
-    { id: "geometric-six", label: "Nur Linien, Rechtecke und Ellipsen – maximal 6 Formen", tools: ["line", "ellipse", "rectangle"], maxItems: 6 }
+    { id: "random-five", kind: "random-geometry", tools: ["line", "ellipse", "rectangle"], maxItems: 5, allowClear: false },
+    { id: "mirrored-five", kind: "random-geometry", tools: ["line", "ellipse", "rectangle"], maxItems: 5, mirrorX: true, allowUndo: false },
+    { id: "blind-five", kind: "random-geometry", tools: ["line", "ellipse", "rectangle"], maxItems: 5, hideExisting: true, allowClear: false }
   ],
   hard: [
-    { id: "precision", label: "Maximal 2 Linien und 3 Ellipsen", tools: ["line", "ellipse"], limits: { line: 2, ellipse: 3 } },
-    { id: "two-each", label: "Maximal 2 Ellipsen, 2 Rechtecke und 1 gerade Linie", tools: ["line", "ellipse", "rectangle"], limits: { line: 1, ellipse: 2, rectangle: 2 } },
-    { id: "three-lifts", label: "Der Stift darf nur 3-mal abgesetzt werden – ohne Rückgängig", tools: ["pen"], limits: { pen: 3 }, allowClear: false, allowUndo: false },
-    { id: "black-geometry", label: "Nur schwarze Geometrie: maximal 4 Formen, keine Korrektur", tools: ["line", "ellipse", "rectangle"], maxItems: 4, singleColor: true, fixedColor: "#151927", allowClear: false, allowUndo: false }
+    { id: "random-five-hard", kind: "random-geometry", tools: ["line", "ellipse", "rectangle"], maxItems: 5, singleColor: true, allowClear: false, allowUndo: false },
+    { id: "mirrored-black-five", kind: "random-geometry", tools: ["line", "ellipse", "rectangle"], maxItems: 5, mirrorX: true, fixedColor: "#151927", allowClear: false, allowUndo: false },
+    { id: "blind-fast-five", kind: "random-geometry", tools: ["line", "ellipse", "rectangle"], maxItems: 5, hideExisting: true, timeFactor: 0.65, allowClear: false, allowUndo: false },
+    { id: "one-stroke", label: "Ohne Absetzen: genau ein zusammenhängender Freihandstrich, ohne Korrektur", tools: ["pen"], limits: { pen: 1 }, allowClear: false, allowUndo: false },
+    { id: "blind-one-stroke", label: "Ein einziger schwarzer Strich blind – du siehst nur die neue Linie während des Ziehens", tools: ["pen"], limits: { pen: 1 }, hideExisting: true, fixedColor: "#151927", allowClear: false, allowUndo: false },
+    { id: "black-geometry-sprint", kind: "random-geometry", tools: ["line", "ellipse", "rectangle"], maxItems: 5, fixedColor: "#151927", timeFactor: 0.5, allowClear: false, allowUndo: false }
   ]
+};
+
+const GEOMETRY_NAMES = {
+  line: ["gerade Linie", "gerade Linien"],
+  ellipse: ["Ellipse", "Ellipsen"],
+  rectangle: ["Rechteck", "Rechtecke"]
 };
 
 function createId(length = 22) {
@@ -86,6 +95,30 @@ function compatibleConstraint(constraint, difficulty = "medium") {
     tools: ["pen", "line", "ellipse", "rectangle"],
     maxItems: difficulty === "hard" ? 8 : 12
   };
+}
+
+function materializeConstraint(template) {
+  const constraint = structuredClone(template);
+  if (constraint.kind !== "random-geometry") return constraint;
+  const tools = constraint.tools.filter((tool) => tool !== "pen");
+  const limits = Object.fromEntries(tools.map((tool) => [tool, 0]));
+  for (let remaining = constraint.maxItems; remaining > 0; remaining -= 1) {
+    const tool = tools[crypto.randomInt(tools.length)];
+    limits[tool] += 1;
+  }
+  constraint.limits = limits;
+  const parts = tools
+    .filter((tool) => limits[tool] > 0)
+    .map((tool) => `${limits[tool]} ${GEOMETRY_NAMES[tool][limits[tool] === 1 ? 0 : 1]}`);
+  const extras = [
+    constraint.mirrorX && "gespiegelt",
+    constraint.hideExisting && "blind",
+    constraint.timeFactor && `${Math.round(constraint.timeFactor * 100)} % Zeit`,
+    constraint.fixedColor && "nur schwarz",
+    constraint.allowUndo === false && "keine Korrektur"
+  ].filter(Boolean);
+  constraint.label = `${parts.join(", ")}${extras.length ? ` – ${extras.join(", ")}` : ""}`;
+  return constraint;
 }
 
 function sanitizeSettings(input = {}, current = {}) {
@@ -275,7 +308,7 @@ function startRound(room) {
   if (!available.length) room.game.usedWords = [];
   const word = wordPool[crypto.randomInt(wordPool.length)];
   const constraints = CONSTRAINTS[room.settings.difficulty];
-  const constraint = constraints[crypto.randomInt(constraints.length)];
+  const constraint = materializeConstraint(constraints[crypto.randomInt(constraints.length)]);
 
   room.round += 1;
   room.game.roundId = createId(14);
@@ -288,7 +321,7 @@ function startRound(room) {
   room.game.correct = null;
   room.game.votes = {};
   room.game.voteStartedAt = null;
-  room.game.deadline = Date.now() + room.settings.drawTime * 1000;
+  room.game.deadline = Date.now() + Math.max(10, Math.round(room.settings.drawTime * (constraint.timeFactor || 1))) * 1000;
   room.game.usedWords.push(word);
 }
 
@@ -361,6 +394,12 @@ function addDrawingItem(room, playerId, input) {
     if (item.from.x === item.to.x && item.from.y === item.to.y) {
       throw new Error("Ziehe die Form etwas größer.");
     }
+  }
+  if (constraint.mirrorX) {
+    const mirror = (point) => ({ ...point, x: 1 - point.x });
+    if (item.points) item.points = item.points.map(mirror);
+    if (item.from) item.from = mirror(item.from);
+    if (item.to) item.to = mirror(item.to);
   }
   room.drawing.push(item);
 }
