@@ -304,7 +304,7 @@ function canvasView(room) {
       <div class="canvas-caption"><span class="eyebrow">RUNDE ${room.round} · ZUG ${room.cycleProgress.current}/${room.cycleProgress.total}</span><strong>${isDrawer ? "Du zeichnest" : `${escapeHtml(drawer?.name || "Jemand")} zeichnet`}</strong></div>
       ${isDrawer ? `<div class="canvas-colors">${["#151927", "#ef4444", "#3b82f6", "#22c55e", "#f59e0b"].map((swatch) => `<button class="color-swatch ${color === swatch ? "selected" : ""}" data-color="${swatch}" ${constraint.fixedColor && swatch !== constraint.fixedColor ? "disabled" : ""} style="background:${swatch}" aria-label="Farbe ${swatch}"></button>`).join("")}</div>
       <div class="canvas-corrections">
-        ${constraint.allowUndo === false ? "" : '<button id="undo-canvas" class="canvas-control" title="Letzte Form rückgängig" aria-label="Rückgängig">↶</button>'}
+        ${constraint.allowUndo === false ? "" : '<button id="undo-canvas" class="canvas-control" title="Letzte Form rückgängig" aria-label="Rückgängig"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7H5v-4"/><path d="M5 7c2.8-3 7.5-3.4 10.9-.8A7 7 0 1 1 6.2 17"/><path d="M5 7v5"/></svg></button>'}
         ${constraint.allowClear === false ? "" : '<button id="clear-canvas" class="canvas-control" title="Leinwand leeren" aria-label="Leinwand leeren">⌫</button>'}
       </div>
       <div class="canvas-bottom-tools"><div class="tool-palette">${toolHtml}</div><label class="width-control"><span>Strichstärke <b id="width-value">${session.width}px</b></span><input id="stroke-width" type="range" min="2" max="32" step="1" value="${session.width}" aria-label="Strichstärke"></label></div>

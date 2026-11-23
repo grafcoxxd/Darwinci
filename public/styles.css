@@ -356,7 +356,7 @@ legend span { color: var(--line); text-transform: uppercase; letter-spacing: .1e
   line-height: 1;
   box-shadow: 0 6px 18px #0003;
 }
-#undo-canvas { padding: 0 0 1px 1px; }
+.canvas-control svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transform: translateX(.5px); }
 .canvas-bottom-tools { left: 14px; right: 14px; bottom: 14px; width: calc(100% - 245px); min-height: 68px; display: flex; align-items: center; gap: 14px; padding: 8px; background: #111722ee; border: 1px solid #ffffff20; border-radius: 14px; box-shadow: 0 8px 28px #0005; backdrop-filter: blur(8px); }
 .canvas-bottom-tools .tool-palette { margin: 0; flex-wrap: nowrap; }
 .canvas-bottom-tools .tool-button { min-width: 66px; background: #202735; }
