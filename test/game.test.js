@@ -165,6 +165,34 @@ test("creates mirrored live previews without changing the persisted drawing", ()
   assert.deepEqual(preview.points[1], { x: 0.6, y: 0.6 });
 });
 
+test("keeps normal live preview coordinates unchanged when mirror flag is absent", () => {
+  const room = createReadyRoom();
+  game.startGame(room);
+  room.game.constraint = {
+    id: "normal-preview",
+    label: "Normal",
+    tools: ["line"]
+  };
+  const preview = game.createDrawingPreview({
+    phase: "drawing",
+    drawerId: room.game.drawerId,
+    roundId: room.game.roundId,
+    constraint: room.game.constraint,
+    difficulty: room.settings.difficulty,
+    abilityEffects: []
+  }, room.game.drawerId, {
+    roundId: room.game.roundId,
+    type: "line",
+    color: "#151927",
+    width: 4,
+    from: { x: 0.2, y: 0.3 },
+    to: { x: 0.4, y: 0.6 }
+  });
+
+  assert.deepEqual(preview.from, { x: 0.2, y: 0.3 });
+  assert.deepEqual(preview.to, { x: 0.4, y: 0.6 });
+});
+
 test("assigns an agent in a two-player game and one ability per round", () => {
   const room = game.newRoom("Alice", "fox");
   game.addPlayer(room, "Bob", "frog");

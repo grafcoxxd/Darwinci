@@ -585,7 +585,7 @@ function createDrawingPreview(drawState, playerId, input) {
     preview.from = clampPoint(input.from);
     preview.to = clampPoint(input.to);
   }
-  if (constraint.mirrorX !== hasAbilityEffect({ game: drawState }, "mirror")) {
+  if (Boolean(constraint.mirrorX) !== hasAbilityEffect({ game: drawState }, "mirror")) {
     const mirror = (point) => ({ ...point, x: 1 - point.x });
     if (preview.points) preview.points = preview.points.map(mirror);
     if (preview.from) preview.from = mirror(preview.from);
