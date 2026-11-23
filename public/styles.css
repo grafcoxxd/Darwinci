@@ -357,13 +357,15 @@ legend span { color: var(--line); text-transform: uppercase; letter-spacing: .1e
 .canvas-fog.active { opacity: .92; }
 @keyframes fog-drift { from { transform: translateX(-8%); } to { transform: translateX(8%); } }
 
-.handicap-list { display: grid; gap: 8px; margin-top: 16px; padding-top: 15px; border-top: 1px solid #ffffff1c; }
-.handicap-item { display: grid; grid-template-columns: 32px auto 1fr; align-items: center; gap: 7px; min-height: 48px; padding: 7px 10px; border: 1px solid #ffffff15; border-radius: 10px; background: #1117207a; }
-.handicap-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: #ffb3471c; color: var(--accent); font-size: 20px; }
-.handicap-item strong { color: var(--text); font-size: 19px; font-variant-numeric: tabular-nums; }
-.handicap-item small { color: var(--muted); font-size: 10px; line-height: 1.2; }
-.handicap-item.yes strong { color: var(--green); }
-.handicap-item.no strong { color: var(--danger); }
+.handicap-list { display: grid; margin-top: 16px; padding-top: 15px; border-top: 1px solid #ffffff1c; border-radius: 11px; overflow: hidden; border: 1px solid #ffffff12; }
+.handicap-zone { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; min-height: 54px; padding: 8px; background: #1117207a; }
+.effect-zone { border-top: 1px solid #ffffff1c; background: #17141a9c; }
+.handicap-item { display: inline-flex; align-items: center; gap: 4px; min-height: 38px; padding: 4px 7px; border-radius: 9px; background: #ffb3470d; }
+.handicap-icon { position: relative; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; color: var(--accent); font-size: 21px; flex: 0 0 auto; }
+.handicap-icon svg { width: 27px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.handicap-item strong { color: var(--text); font-size: 20px; font-variant-numeric: tabular-nums; min-width: 12px; }
+.handicap-item.forbidden .handicap-icon::before { content: ""; position: absolute; inset: 0; border: 2px solid var(--danger); border-radius: 50%; }
+.handicap-item.forbidden .handicap-icon::after { content: ""; position: absolute; left: 3px; top: 13px; width: 24px; height: 2px; background: var(--danger); transform: rotate(-38deg); transform-origin: center; border-radius: 2px; }
 .handicap-item.black .handicap-icon { color: #0b0b0b; background: #eee; }
 .context-sidebar h3 { font-size: 24px; margin: 7px 0 10px; }
 .context-sidebar p { color: var(--muted); font-size: 11px; line-height: 1.6; }

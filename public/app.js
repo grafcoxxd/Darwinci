@@ -235,30 +235,28 @@ function rolePanel(room) {
 }
 
 function handicapRows(constraint) {
-  if (!constraint) return [];
-  const rows = [];
+  if (!constraint) return { mode: [], effects: [] };
+  const mode = [];
+  const effects = [];
   const icons = { pen: "✎", line: "╱", ellipse: "◯", rectangle: "▭" };
-  const labels = { pen: "Strich", line: "Linien", ellipse: "Ellipsen", rectangle: "Rechtecke" };
   if (constraint.limits) {
     for (const [tool, limit] of Object.entries(constraint.limits)) {
-      rows.push({ icon: icons[tool] || "⌗", value: limit, text: labels[tool] || tool });
+      mode.push({ icon: icons[tool] || "⌗", value: limit, title: `${limit} ${tool}` });
     }
   } else if (constraint.maxItems) {
-    rows.push({ icon: "⌗", value: constraint.maxItems, text: "Formen" });
+    mode.push({ icon: "⌗", value: constraint.maxItems, title: `${constraint.maxItems} Formen` });
   }
   if (constraint.timeFactor) {
-    rows.push({ icon: "⏱", value: `${Math.round(constraint.timeFactor * 100)}%`, text: "Zeit" });
+    mode.push({ icon: "⏱", value: `${Math.round(constraint.timeFactor * 100)}%`, title: "Verkürzte Zeit" });
   }
-  if (constraint.mirrorX) rows.push({ icon: "⇄", value: "AN", text: "gespiegelt" });
-  if (constraint.hideExisting) rows.push({ icon: "◉", value: "AN", text: "blind" });
+  if (constraint.mirrorX) effects.push({ icon: "⇄", title: "Gespiegelt" });
+  if (constraint.hideExisting) effects.push({ icon: '<svg viewBox="0 0 32 20" aria-hidden="true"><path d="M2 10Q16 0 30 10Q16 20 2 10Z"/><path d="M4 16L28 4"/></svg>', title: "Blind", svg: true });
   if (constraint.singleColor || constraint.fixedColor) {
-    rows.push({ icon: "●", value: constraint.fixedColor ? "1" : "1", text: constraint.fixedColor ? "Schwarz" : "Farbe", black: Boolean(constraint.fixedColor) });
+    effects.push({ icon: "●", title: constraint.fixedColor ? "Nur Schwarz" : "Eine Farbe", black: Boolean(constraint.fixedColor) });
   }
-  rows.push({ icon: "↶", value: constraint.allowUndo === false ? "×" : "✓", text: "Rückgängig", status: constraint.allowUndo === false ? "no" : "yes" });
-  if (constraint.allowClear === false && constraint.allowUndo !== false) {
-    rows.push({ icon: "⌫", value: "×", text: "Leeren", status: "no" });
-  }
-  return rows;
+  if (constraint.allowUndo === false) effects.push({ icon: "↶", title: "Rückgängig verboten", forbidden: true });
+  if (constraint.allowClear === false) effects.push({ icon: "🗑", title: "Leeren verboten", forbidden: true });
+  return { mode, effects };
 }
 
 function canvasView(room) {
@@ -291,7 +289,11 @@ function canvasView(room) {
   const color = constraint?.fixedColor || session.color;
   const handicaps = handicapRows(constraint);
   const abilityCard = room.myAbility ? `<div class="ability-card ${room.myAbility.used ? "used" : ""}"><span class="eyebrow">EINMALIGE AGENTENFÄHIGKEIT</span><div class="ability-title"><b>${room.myAbility.icon}</b><strong>${escapeHtml(room.myAbility.name)}</strong></div><p>${escapeHtml(room.myAbility.description)}</p><button id="use-agent-ability" class="ability-button" ${room.myAbility.used ? "disabled" : ""}>${room.myAbility.used ? "Eingesetzt" : "Jetzt einsetzen"}</button></div>` : "";
-  const secret = room.word ? `<div class="role-card secret-card"><span class="eyebrow">${isDrawer ? "GEHEIMES WORT" : "DEIN WISSEN"}</span><div class="secret-word">${escapeHtml(room.word)}</div>${isDrawer ? `<div class="handicap-list">${handicaps.map((item) => `<div class="handicap-item ${item.status || ""} ${item.black ? "black" : ""}"><span class="handicap-icon">${item.icon}</span><strong>${item.value}</strong><small>${item.text}</small></div>`).join("")}</div>` : ""}</div>` : "";
+  const handicapItem = (item) => `<div class="handicap-item ${item.forbidden ? "forbidden" : ""} ${item.black ? "black" : ""}" title="${item.title}" aria-label="${item.title}">
+    <span class="handicap-icon ${item.svg ? "svg-icon" : ""}">${item.icon}</span>
+    ${item.value !== undefined ? `<strong>${item.value}</strong>` : ""}
+  </div>`;
+  const secret = room.word ? `<div class="role-card secret-card"><span class="eyebrow">${isDrawer ? "GEHEIMES WORT" : "DEIN WISSEN"}</span><div class="secret-word">${escapeHtml(room.word)}</div>${isDrawer ? `<div class="handicap-list"><div class="handicap-zone mode-zone">${handicaps.mode.map(handicapItem).join("")}</div>${handicaps.effects.length ? `<div class="handicap-zone effect-zone">${handicaps.effects.map(handicapItem).join("")}</div>` : ""}</div>` : ""}</div>` : "";
   return `<section class="main-stage canvas-stage panel">
     <div class="canvas-wrap"><canvas id="drawing-canvas" class="${isDrawer ? "" : "canvas-disabled"}"></canvas>
     <div class="canvas-fog ${room.activeAbilityEffects?.some((effect) => effect.id === "fog") && isDrawer ? "active" : ""}"></div>
