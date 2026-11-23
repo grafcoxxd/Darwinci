@@ -92,7 +92,7 @@ function connect() {
   });
   session.socket.on("error:message", toast);
   session.socket.on("drawing:preview", ({ roundId, preview }) => {
-    if (roundId !== session.room?.roundId || session.room?.drawerId === session.playerId) return;
+    if (roundId !== session.room?.roundId) return;
     session.remotePreview = preview;
     redraw();
   });
@@ -252,7 +252,11 @@ function handicapRows(constraint) {
   if (constraint.mirrorX) effects.push({ icon: "⇄", title: "Gespiegelt" });
   if (constraint.hideExisting) effects.push({ icon: '<svg viewBox="0 0 32 20" aria-hidden="true"><path d="M2 10Q16 0 30 10Q16 20 2 10Z"/><path d="M4 16L28 4"/></svg>', title: "Blind", svg: true });
   if (constraint.singleColor || constraint.fixedColor) {
-    effects.push({ icon: "●", title: constraint.fixedColor ? "Nur Schwarz" : "Eine Farbe", black: Boolean(constraint.fixedColor) });
+    effects.push({
+      icon: constraint.fixedColor ? "" : "◐",
+      title: constraint.fixedColor ? "Nur Schwarz" : "Eine Farbe",
+      black: Boolean(constraint.fixedColor)
+    });
   }
   if (constraint.allowUndo === false) effects.push({ icon: "↶", title: "Rückgängig verboten", forbidden: true });
   if (constraint.allowClear === false) effects.push({ icon: "🗑", title: "Leeren verboten", forbidden: true });
@@ -494,17 +498,7 @@ function redraw() {
   if (session.remotePreview && session.remotePreview.roundId === session.room.roundId) {
     drawShape(session.remotePreview, rect);
   }
-  if (session.drawing && session.points.length) {
-    const preview = {
-      type: session.tool,
-      color: activeHeavyInk() ? "#151927" : session.color,
-      width: activeHeavyInk() ? 32 : session.width,
-      points: session.points,
-      from: session.draftFrom,
-      to: session.draftTo
-    };
-    drawShape(mirrorPreview(preview), rect);
-  }
+  // Live geometry is rendered from the server-normalized preview for every player.
 }
 
 function drawShape(shape, rect) {
@@ -544,20 +538,6 @@ function drawShape(shape, rect) {
     context.rect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
   }
   context.stroke();
-}
-
-function mirrorPreview(shape) {
-  const activeMirror = session.room.activeAbilityEffects?.some((effect) =>
-    effect.id === "mirror" && effect.expiresAt > Date.now()
-  );
-  if (Boolean(session.room.constraint?.mirrorX) === Boolean(activeMirror)) return shape;
-  const mirrorPoint = (point) => point && ({ ...point, x: 1 - point.x });
-  return {
-    ...shape,
-    points: shape.points?.map(mirrorPoint),
-    from: mirrorPoint(shape.from),
-    to: mirrorPoint(shape.to)
-  };
 }
 
 function pointerPoint(event) {

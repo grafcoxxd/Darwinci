@@ -188,11 +188,11 @@ io.on("connection", (socket) => {
   socket.on("drawing:preview", socketAction(socket, async (session, payload) => {
     if (payload.clear) {
       if (payload.roundId !== session.drawState?.roundId || session.drawState?.drawerId !== session.playerId) return;
-      socket.to(session.code).emit("drawing:preview", { roundId: payload.roundId, preview: null });
+      io.to(session.code).emit("drawing:preview", { roundId: payload.roundId, preview: null });
       return;
     }
     const preview = game.createDrawingPreview(session.drawState, session.playerId, payload);
-    socket.to(session.code).emit("drawing:preview", { roundId: preview.roundId, preview });
+    io.to(session.code).emit("drawing:preview", { roundId: preview.roundId, preview });
   }));
 
   socket.on("drawing:clear", socketAction(socket, async (session, payload) => {
