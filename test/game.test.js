@@ -213,6 +213,23 @@ test("random geometry restrictions distribute exactly five forms", () => {
   assert.ok(distributions.size >= 1);
 });
 
+test("uses the lobby geometry shape count for random constraints", () => {
+  const room = createReadyRoom();
+  room.settings.geometryShapeCount = 8;
+  let checked = false;
+  for (let index = 0; index < 50; index += 1) {
+    game.startRound(room);
+    if (room.game.constraint.kind === "random-geometry") {
+      const total = Object.values(room.game.constraint.limits).reduce((sum, value) => sum + value, 0);
+      assert.equal(total, 8);
+      assert.equal(room.game.constraint.maxItems, 8);
+      checked = true;
+      break;
+    }
+  }
+  assert.equal(checked, true);
+});
+
 test("never assigns multi-lift stroke restrictions", () => {
   const room = createReadyRoom();
   room.settings.difficulty = "hard";

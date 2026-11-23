@@ -41,7 +41,8 @@ const DEFAULT_SETTINGS = {
   winMode: "score",
   targetScore: 4,
   targetScoreCustom: false,
-  maxRounds: 8
+  maxRounds: 8,
+  geometryShapeCount: 5
 };
 
 const CONSTRAINTS = {
@@ -107,9 +108,10 @@ function compatibleConstraint(constraint, difficulty = "medium") {
   };
 }
 
-function materializeConstraint(template) {
+function materializeConstraint(template, geometryShapeCount = 5) {
   const constraint = structuredClone(template);
   if (constraint.kind !== "random-geometry") return constraint;
+  constraint.maxItems = clampInt(geometryShapeCount, 1, 10, 5);
   const tools = constraint.tools.filter((tool) => tool !== "pen");
   const limits = Object.fromEntries(tools.map((tool) => [tool, 0]));
   for (let remaining = constraint.maxItems; remaining > 0; remaining -= 1) {
@@ -150,6 +152,7 @@ function sanitizeSettings(input = {}, current = {}) {
   settings.targetScoreCustom = Boolean(current.targetScoreCustom) ||
     (input.targetScore !== undefined && Number(input.targetScore) !== Number(current.targetScore ?? settings.targetScore));
   settings.maxRounds = clampInt(input.maxRounds, 1, 30, 8);
+  settings.geometryShapeCount = clampInt(input.geometryShapeCount, 1, 10, 5);
   return settings;
 }
 
@@ -361,7 +364,10 @@ function startTurn(room) {
   if (!available.length) room.game.usedWords = [];
   const word = wordPool[crypto.randomInt(wordPool.length)];
   const constraints = CONSTRAINTS[room.settings.difficulty];
-  const constraint = materializeConstraint(constraints[crypto.randomInt(constraints.length)]);
+  const constraint = materializeConstraint(
+    constraints[crypto.randomInt(constraints.length)],
+    room.settings.geometryShapeCount
+  );
 
   room.game.roundId = createId(14);
   room.game.abilityEffects = [];

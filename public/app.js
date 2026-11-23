@@ -181,6 +181,7 @@ function renderSettings(room) {
     <label class="setting-row">Einschränkungen<select name="difficulty" ${!isHost ? "disabled" : ""}>
       <option value="easy" ${s.difficulty === "easy" ? "selected" : ""}>Sanft</option><option value="medium" ${s.difficulty === "medium" ? "selected" : ""}>Mittel</option><option value="hard" ${s.difficulty === "hard" ? "selected" : ""}>Fies</option>
     </select></label>
+    <label class="setting-row">Geometrie-Formen<input type="number" name="geometryShapeCount" min="1" max="10" value="${s.geometryShapeCount}" ${!isHost ? "disabled" : ""}><small>Gesamtzahl der zufälligen Linien, Ellipsen und Rechtecke pro Geometrie-Handicap.</small></label>
     <label class="setting-row">Wort-Paket<select name="wordPack" ${!isHost ? "disabled" : ""}>${room.wordPacks.map(pack => `<option value="${pack.id}" ${s.wordPack === pack.id ? "selected" : ""}>${pack.label}</option>`).join("")}</select></label>
     <label class="setting-row custom-words ${["custom", "mix"].includes(s.wordPack) ? "" : "hidden"}">Eigene Wörter<textarea name="customWords" rows="4" placeholder="Ein Begriff pro Zeile oder mit Kommas getrennt" ${!isHost ? "disabled" : ""}>${escapeHtml(s.customWords)}</textarea></label>
     <label class="setting-row score-target">Benötigte Punkte<input type="number" name="targetScore" min="1" max="20" value="${room.targetScore}" ${!isHost ? "disabled" : ""}><small>Empfehlung für ${room.players.length} Spieler: ${room.recommendedTargetScore} Punkte. 1 richtiges Wort = 1 Punkt.</small></label>
